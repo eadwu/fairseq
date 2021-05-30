@@ -5,6 +5,7 @@
 
 from typing import Dict, List, Optional
 
+import math
 import torch
 import torch.nn as nn
 from fairseq import utils
@@ -192,6 +193,13 @@ class TransformerDecoderLayer(nn.Module):
 
         self.cross_self_attention = getattr(args, "cross_self_attention", False)
 
+        # The number of tasks is the number of language pairs
+        self.lang_pairs = args.lang_pairs
+        if isinstance(self.lang_pairs, str):
+            self.lang_pairs = self.lang_pairs.split(",")
+        self.n_tasks = len(self.lang_pairs)
+        self.batch_ensemble_ffn = getattr(args, "batch_ensemble_ffn", False)
+
         self.self_attn = self.build_self_attention(
             self.embed_dim,
             args,
@@ -222,6 +230,31 @@ class TransformerDecoderLayer(nn.Module):
         else:
             self.encoder_attn = self.build_encoder_attention(self.embed_dim, args)
             self.encoder_attn_layer_norm = LayerNorm(self.embed_dim, export=export)
+
+        # BatchEnsemble inputs
+        if self.batch_ensemble_ffn:
+            # r_i is the column vector
+            self.r_i = [
+                nn.Parameter(torch.zeros(
+                    args.decoder_ffn_embed_dim, 1,
+                    dtype=torch.float16 if args.fp16 else torch.float32,
+                    device='cuda' if torch.cuda.is_available() else 'cpu',
+                ))
+                for _ in range(self.n_tasks)
+            ]
+            # s_i is the row vector
+            self.s_i = [
+                nn.Parameter(torch.zeros(
+                    self.embed_dim, 1,
+                    dtype=torch.float16 if args.fp16 else torch.float32,
+                    device='cuda' if torch.cuda.is_available() else 'cpu',
+                ))
+                for _ in range(self.n_tasks)
+            ]
+            # Initialize parameters
+            for i in range(self.n_tasks):
+                nn.init.kaiming_uniform_(self.r_i[i], a=math.sqrt(5))
+                nn.init.kaiming_uniform_(self.s_i[i], a=math.sqrt(5))
 
         self.fc1 = self.build_fc1(
             self.embed_dim,
@@ -395,7 +428,22 @@ class TransformerDecoderLayer(nn.Module):
         if self.normalize_before:
             x = self.final_layer_norm(x)
 
-        x = self.activation_fn(self.fc1(x))
+        if not self.batch_ensemble_ffn:
+            x = self.fc1(x)
+        else:
+            sum = 0
+            for i in range(self.n_tasks):
+                r_i = self.r_i[i]
+                s_i = self.s_i[i]
+
+                W_i = self.fc1.weight * (r_i @ s_i.T)
+                sum += W_i
+            W = sum / self.n_tasks
+            x = x @ W.T
+            if self.fc1.bias is not None:
+                x = x + self.fc1.bias
+
+        x = self.activation_fn(x)
         x = self.activation_dropout_module(x)
         x = self.fc2(x)
         x = self.dropout_module(x)
