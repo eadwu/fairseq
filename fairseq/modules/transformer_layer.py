@@ -450,7 +450,13 @@ class TransformerDecoderLayer(nn.Module):
                     r_i = self.r_i[i]
                     s_i = self.s_i[i]
 
-                    fc1_set_grad(self.batch_ensemble_root < 0 or i == self.batch_ensemble_root)
+                    # If batch_ensemble_root is < 0, then it hasn't been enabled
+                    # in which case gradients flow everywhere, otherwise
+                    # fc1.weight should only be updated through the task
+                    # specified by batch_ensemble_root.
+                    fc1_set_grad(
+                        self.batch_ensemble_root < 0 or i == self.batch_ensemble_root
+                    )
                     W_i = self.fc1.weight * (r_i @ s_i.T)
                     sum += W_i
                 W = sum / self.n_tasks
