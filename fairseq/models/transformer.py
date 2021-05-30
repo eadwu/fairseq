@@ -218,6 +218,8 @@ class TransformerModel(FairseqEncoderDecoderModel):
                             help='Batch Ensemble MLP layer in the Transformer')
         parser.add_argument('--batch-ensemble-root', type=int, default=-1,
                             help='Batch Ensemble root task (1-based) for lifelong learning')
+        parser.add_argument('--batch-ensemble-isolated', default=False, action='store_true',
+                            help='Use each Batch Ensemble r_i, s_i in isolation')
         # args for Fully Sharded Data Parallel (FSDP) training
         parser.add_argument(
             '--min-params-to-wrap', type=int, metavar='D', default=DEFAULT_MIN_PARAMS_TO_WRAP,
