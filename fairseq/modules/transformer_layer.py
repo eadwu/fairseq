@@ -430,17 +430,18 @@ class TransformerDecoderLayer(nn.Module):
         if not self.batch_ensemble_ffn:
             x = self.fc1(x)
         else:
+            def fc1_set_grad(cond):
+                for param in self.fc1.parameters():
+                    param.requires_grad_(cond)
+
             if self.batch_ensemble_isolated:
                 # Independent r_i and s_i for each lang_pair
                 r_i = self.r_i[lang_pair_idx]
                 s_i = self.s_i[lang_pair_idx]
                 w_i = r_i @ s_i.T
 
-                if lang_pair_idx == self.batch_ensemble_root:
-                    W = self.fc1.weight * w_i
-                else:
-                    with torch.no_grad():
-                        W = self.fc1.weight * w_i
+                fc1_set_grad(lang_pair_idx == self.batch_ensemble_root)
+                W = self.fc1.weight * w_i
             else:
                 # Lifelong learning, essentially the same as below but with
                 # the proper loss calculations.
@@ -449,11 +450,8 @@ class TransformerDecoderLayer(nn.Module):
                     r_i = self.r_i[i]
                     s_i = self.s_i[i]
 
-                    if self.batch_ensemble_root < 0 or i == self.batch_ensemble_root:
-                        W_i = self.fc1.weight * (r_i @ s_i.T)
-                    else:
-                        with torch.no_grad():
-                            W_i = self.fc1.weight * (r_i @ s_i.T)
+                    fc1_set_grad(self.batch_ensemble_root < 0 or i == self.batch_ensemble_root)
+                    W_i = self.fc1.weight * (r_i @ s_i.T)
                     sum += W_i
                 W = sum / self.n_tasks
             x = x @ W.T
