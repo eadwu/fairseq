@@ -197,6 +197,9 @@ class TransformerModel(FairseqEncoderDecoderModel):
                             help='block size of quantization noise at training time')
         parser.add_argument('--quant-noise-scalar', type=float, metavar='D', default=0,
                             help='scalar quantization noise and scalar quantization at training time')
+        # args for Training with BatchEnsemble
+        parser.add_argument('--batch-ensemble-ffn', default=False, action='store_true',
+                            help='Batch Ensemble MLP layer in the Transformer')
         # args for Fully Sharded Data Parallel (FSDP) training
         parser.add_argument(
             '--min-params-to-wrap', type=int, metavar='D', default=DEFAULT_MIN_PARAMS_TO_WRAP,
