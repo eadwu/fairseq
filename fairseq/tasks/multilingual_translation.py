@@ -16,7 +16,7 @@ from fairseq.data import (
     RoundRobinZipDatasets,
     TransformEosLangPairDataset,
 )
-from fairseq.models import FairseqMultiModel
+from fairseq.models import FairseqMultiModel, FairseqEncoderDecoderModel
 from fairseq.tasks.translation import load_langpair_dataset
 
 from . import LegacyFairseqTask, register_task
@@ -89,12 +89,15 @@ class MultilingualTranslationTask(LegacyFairseqTask):
                                  'language token. (src/tgt)')
         parser.add_argument('--decoder-langtok', action='store_true',
                             help='replace beginning-of-sentence in target sentence with target language token')
+        parser.add_argument('--shared-model', default=False, action='store_true',
+                            help='Single model for all languages')
         # fmt: on
 
     def __init__(self, args, dicts, training):
         super().__init__(args)
         self.dicts = dicts
         self.training = training
+        self.shared_model = getattr(args, 'shared_model')
         if training:
             self.lang_pairs = args.lang_pairs
         else:
@@ -312,17 +315,24 @@ class MultilingualTranslationTask(LegacyFairseqTask):
         from fairseq import models
 
         model = models.build_model(args, self)
-        if not isinstance(model, FairseqMultiModel):
-            raise ValueError(
-                "MultilingualTranslationTask requires a FairseqMultiModel architecture"
-            )
+        if not self.shared_model:
+            if not isinstance(model, FairseqMultiModel):
+                raise ValueError(
+                    "MultilingualTranslationTask requires a FairseqMultiModel architecture"
+                )
+        else:
+            if not isinstance(model, FairseqEncoderDecoderModel):
+                raise ValueError(
+                    "MultilingualTranslationTask requires a FairseqEncoderDecoderModel architecture"
+                )
+            model.with_keys(self.lang_pairs)
         return model
 
     def _per_lang_pair_train_loss(
         self, lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
     ):
         loss, sample_size, logging_output = criterion(
-            model.models[lang_pair], sample[lang_pair]
+            model if self.shared_model else model.models[lang_pair], sample[lang_pair]
         )
         if ignore_grad:
             loss *= 0
@@ -373,7 +383,9 @@ class MultilingualTranslationTask(LegacyFairseqTask):
         return agg_loss, agg_sample_size, agg_logging_output
 
     def _per_lang_pair_valid_loss(self, lang_pair, model, criterion, sample):
-        return criterion(model.models[lang_pair], sample[lang_pair])
+        return criterion(
+            model if self.shared_model else model.models[lang_pair], sample[lang_pair]
+        )
 
     def valid_step(self, sample, model, criterion):
         model.eval()

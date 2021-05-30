@@ -110,6 +110,19 @@ class TransformerModel(FairseqEncoderDecoderModel):
         super().__init__(encoder, decoder)
         self.args = args
         self.supports_align_args = True
+        self.keys = None
+
+    def with_keys(self, keys):
+        self.keys = keys
+
+    def max_positions(self):
+        if self.keys is None:
+            return super(TransformerModel, self).max_positions()
+        else:
+            return {
+                key: super(TransformerModel, self).max_positions()
+                for key in self.keys
+            }
 
     @staticmethod
     def add_args(parser):
