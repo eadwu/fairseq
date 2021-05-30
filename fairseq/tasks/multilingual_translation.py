@@ -331,6 +331,16 @@ class MultilingualTranslationTask(LegacyFairseqTask):
     def _per_lang_pair_train_loss(
         self, lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
     ):
+        lang_pair_idx = [
+            i
+            for i, lp in enumerate(self.model_lang_pairs)
+            if lp == lang_pair
+        ]
+        model.with_lang_pair_idx(lang_pair_idx[0])
+
+        if getattr(self.args, "batch_ensemble_root", -1) > -1:
+            assert len(lang_pair_idx) > 0
+
         loss, sample_size, logging_output = criterion(
             model if self.shared_model else model.models[lang_pair], sample[lang_pair]
         )

@@ -115,6 +115,9 @@ class TransformerModel(FairseqEncoderDecoderModel):
     def with_keys(self, keys):
         self.keys = keys
 
+    def with_lang_pair_idx(self, lang_idx):
+        self.decoder.with_lang_pair_idx(lang_idx)
+
     def max_positions(self):
         if self.keys is None:
             return super(TransformerModel, self).max_positions()
@@ -672,6 +675,7 @@ class TransformerDecoder(FairseqIncrementalDecoder):
         output_projection=None,
     ):
         self.args = args
+        self.lang_pair_idx = None
         super().__init__(dictionary)
         self.register_buffer("version", torch.Tensor([3]))
         self._future_mask = torch.empty(0)
@@ -755,6 +759,9 @@ class TransformerDecoder(FairseqIncrementalDecoder):
         self.output_projection = output_projection
         if self.output_projection is None:
             self.build_output_projection(args, dictionary, embed_tokens)
+
+    def with_lang_pair_idx(self, lang_pair_idx):
+        self.lang_pair_idx = lang_pair_idx
 
     def build_output_projection(self, args, dictionary, embed_tokens):
         if args.adaptive_softmax_cutoff is not None:
@@ -968,6 +975,7 @@ class TransformerDecoder(FairseqIncrementalDecoder):
                 self_attn_padding_mask=self_attn_padding_mask,
                 need_attn=bool((idx == alignment_layer)),
                 need_head_weights=bool((idx == alignment_layer)),
+                lang_pair_idx=self.lang_pair_idx
             )
             inner_states.append(x)
             if layer_attn is not None and idx == alignment_layer:
