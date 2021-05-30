@@ -193,6 +193,7 @@ class TransformerDecoderLayer(nn.Module):
             self.lang_pairs = self.lang_pairs.split(",")
         self.n_tasks = len(self.lang_pairs)
         self.batch_ensemble_ffn = getattr(args, "batch_ensemble_ffn", False)
+        self.batch_ensemble_root = getattr(args, "batch_ensemble_root", -1)
 
         self.self_attn = self.build_self_attention(
             self.embed_dim,
@@ -428,12 +429,18 @@ class TransformerDecoderLayer(nn.Module):
         if not self.batch_ensemble_ffn:
             x = self.fc1(x)
         else:
+            # Lifelong learning, essentially the same as below but with
+            # the proper loss calculations.
             sum = 0
             for i in range(self.n_tasks):
                 r_i = self.r_i[i]
                 s_i = self.s_i[i]
 
-                W_i = self.fc1.weight * (r_i @ s_i.T)
+                if self.batch_ensemble_root < 0 or i == self.batch_ensemble_root:
+                    W_i = self.fc1.weight * (r_i @ s_i.T)
+                else:
+                    with torch.no_grad():
+                        W_i = self.fc1.weight * (r_i @ s_i.T)
                 sum += W_i
             W = sum / self.n_tasks
             x = x @ W.T
