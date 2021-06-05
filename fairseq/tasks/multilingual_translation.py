@@ -393,6 +393,13 @@ class MultilingualTranslationTask(LegacyFairseqTask):
         return agg_loss, agg_sample_size, agg_logging_output
 
     def _per_lang_pair_valid_loss(self, lang_pair, model, criterion, sample):
+        lang_pair_idx = [
+            i
+            for i, lp in enumerate(self.model_lang_pairs)
+            if lp == lang_pair
+        ]
+        model.with_lang_pair_idx(lang_pair_idx[0])
+
         return criterion(
             model if self.shared_model else model.models[lang_pair], sample[lang_pair]
         )
@@ -431,6 +438,16 @@ class MultilingualTranslationTask(LegacyFairseqTask):
                 )
             else:
                 bos_token = self.target_dictionary.eos()
+
+            lang_pair_idx = [
+                i
+                for i, lp in enumerate(self.model_lang_pairs)
+                if lp == f"{self.args.source_lang}-{self.args.target_lang}"
+            ]
+
+            for model in models:
+                model.with_lang_pair_idx(lang_pair_idx[0])
+
             return generator.generate(
                 models,
                 sample,
