@@ -293,6 +293,9 @@ class FairseqEncoderDecoderModel(BaseFairseqModel):
         check_type(self.encoder, FairseqEncoder)
         check_type(self.decoder, FairseqDecoder)
 
+    def with_lang_pair_idx(self, lang_pair_idx):
+        self.decoder.with_lang_pair_idx(lang_pair_idx)
+
     def forward(self, src_tokens, src_lengths, prev_output_tokens, **kwargs):
         """
         Run the forward pass for an encoder-decoder model.
