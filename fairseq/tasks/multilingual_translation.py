@@ -321,6 +321,15 @@ class MultilingualTranslationTask(LegacyFairseqTask):
     def _per_lang_pair_train_loss(
         self, lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
     ):
+        lang_pair_idx = [
+            i
+            for i, lp in enumerate(self.model_lang_pairs)
+            if lp == lang_pair
+        ]
+
+        for model in model.models:
+            model.with_lang_pair_idx(lang_pair_idx[0])
+
         loss, sample_size, logging_output = criterion(
             model.models[lang_pair], sample[lang_pair]
         )
@@ -373,6 +382,15 @@ class MultilingualTranslationTask(LegacyFairseqTask):
         return agg_loss, agg_sample_size, agg_logging_output
 
     def _per_lang_pair_valid_loss(self, lang_pair, model, criterion, sample):
+        lang_pair_idx = [
+            i
+            for i, lp in enumerate(self.model_lang_pairs)
+            if lp == lang_pair
+        ]
+
+        for model in model.models:
+            model.with_lang_pair_idx(lang_pair_idx[0])
+
         return criterion(model.models[lang_pair], sample[lang_pair])
 
     def valid_step(self, sample, model, criterion):
@@ -409,6 +427,16 @@ class MultilingualTranslationTask(LegacyFairseqTask):
                 )
             else:
                 bos_token = self.target_dictionary.eos()
+
+            lang_pair_idx = [
+                i
+                for i, lp in enumerate(self.model_lang_pairs)
+                if lp == f"{self.args.source_lang}-{self.args.target_lang}"
+            ]
+
+            for model in models:
+                model.with_lang_pair_idx(lang_pair_idx[0])
+
             return generator.generate(
                 models,
                 sample,
