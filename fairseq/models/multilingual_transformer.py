@@ -204,8 +204,8 @@ class MultilingualTransformerModel(FairseqMultiModel):
         super().load_state_dict(state_dict_subset, strict=strict, model_cfg=model_cfg)
 
     def with_lang_pair_idx(self, lang_pair_idx):
-        for model in self.models:
-            model.with_lang_pair_idx(lang_pair_idx)
+        for key in self.models:
+            self.models[key].with_lang_pair_idx(lang_pair_idx)
 
 
 @register_model_architecture("multilingual_transformer", "multilingual_transformer")

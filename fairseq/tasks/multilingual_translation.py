@@ -327,8 +327,8 @@ class MultilingualTranslationTask(LegacyFairseqTask):
             if lp == lang_pair
         ]
 
-        for model in model.models:
-            model.with_lang_pair_idx(lang_pair_idx[0])
+        for key in model.models:
+            model.models[key].with_lang_pair_idx(lang_pair_idx[0])
 
         loss, sample_size, logging_output = criterion(
             model.models[lang_pair], sample[lang_pair]
@@ -388,8 +388,8 @@ class MultilingualTranslationTask(LegacyFairseqTask):
             if lp == lang_pair
         ]
 
-        for model in model.models:
-            model.with_lang_pair_idx(lang_pair_idx[0])
+        for key in model.models:
+            model.models[key].with_lang_pair_idx(lang_pair_idx[0])
 
         return criterion(model.models[lang_pair], sample[lang_pair])
 
