@@ -253,10 +253,25 @@ class TransformerDecoderLayer(nn.Module):
                 ))
                 for _ in range(self.n_tasks)
             ]
+            # b_i is the bias vectors
+            self.b_i = [
+                nn.Parameter(torch.zeros(
+                    args.decoder_ffn_embed_dim, 1,
+                    dtype=torch.float16 if args.fp16 else torch.float32,
+                    device='cuda' if torch.cuda.is_available() else 'cpu',
+                ))
+                for _ in range(self.n_tasks)
+            ]
             # Initialize parameters
             for i in range(self.n_tasks):
+                # Initialize r_i and s_i parameters
                 nn.init.kaiming_uniform_(self.r_i[i], a=math.sqrt(5))
                 nn.init.kaiming_uniform_(self.s_i[i], a=math.sqrt(5))
+                # Initialize b_i parameters
+                W_i = self.r_i[i] @ self.s_i[i].T
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(W_i)
+                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+                nn.init.uniform_(self.b_i[i], -bound, bound)
 
         self.fc1 = self.build_fc1(
             self.embed_dim,
