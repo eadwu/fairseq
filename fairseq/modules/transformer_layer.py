@@ -461,9 +461,12 @@ class TransformerDecoderLayer(nn.Module):
                 r_i = self.r_i[lang_pair_idx]
                 s_i = self.s_i[lang_pair_idx]
                 w_i = r_i @ s_i.T
-
                 fc1_set_grad(lang_pair_idx == self.batch_ensemble_root)
                 W = self.fc1.weight * w_i
+                x = x @ W.T
+
+                b_i = self.b_i[lang_pair_idx]
+                x = x + b_i
             else:
                 # Lifelong learning, essentially the same as below but with
                 # the proper loss calculations.
@@ -480,11 +483,12 @@ class TransformerDecoderLayer(nn.Module):
                         self.batch_ensemble_root < 0 or i == self.batch_ensemble_root
                     )
                     W_i = self.fc1.weight * (r_i @ s_i.T)
-                    sum += W_i
-                W = sum / self.n_tasks
-            x = x @ W.T
-            if self.fc1.bias is not None:
-                x = x + self.fc1.bias
+                    xW = x @ W_i.T
+
+                    b_i = self.b_i[i]
+                    xWb = xW + b_i
+                    sum = sum + xWb
+                x = sum / self.n_tasks
 
         x = self.activation_fn(x)
         x = self.activation_dropout_module(x)
