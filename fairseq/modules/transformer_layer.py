@@ -272,6 +272,10 @@ class TransformerDecoderLayer(nn.Module):
                 fan_in, _ = nn.init._calculate_fan_in_and_fan_out(W_i)
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
                 nn.init.uniform_(self.b_i[i], -bound, bound)
+                # Register Parameters
+                self.register_parameter(f"r_{i}", self.r_i[i])
+                self.register_parameter(f"s_{i}", self.s_i[i])
+                self.register_parameter(f"bias_{i}", self.b_i[i])
 
         self.fc1 = self.build_fc1(
             self.embed_dim,
