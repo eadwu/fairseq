@@ -30,7 +30,7 @@ class CAVIAMultilingualTransformer(MultilingualTransformerModel):
 @register_model_architecture(
     "cavia_multilingual_transformer", "cavia_multilingual_transformer"
 )
-def latent_multilingual_architecture(args):
+def cavia_multilingual_architecture(args):
     args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 512)
     args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 1024)
     args.encoder_attention_heads = getattr(args, "encoder_attention_heads", 4)
