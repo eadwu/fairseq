@@ -26,24 +26,19 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
     def __init__(self, args, dicts, training):
         super().__init__(args, dicts, training)
-        self.src_langs, self.tgt_langs = zip(
-            *[
-              (lang.split("-")[0], lang.split("-")[1])
-              for lang in args.lang_pairs
-            ]
-        )
 
         # Needed to satisfy an assumption for shared gradient accumulation
         assert self.args.share_encoders
         # Needed for shared r_i, s_i, and b_i, through shared TransformerDecoder(s)
         assert self.args.share_decoders
 
-        self.lang_pairs = ["{}-{}".format(args.source_lang, args.target_lang)]
+        self.lang_pairs = args.lang_pairs
         self.eval_lang_pairs = self.lang_pairs
         self.model_lang_pairs = self.lang_pairs
+        assert len(self.lang_pairs) > 0
 
         # Learning rate for context parameters
-        self.context_lr = self.args.lr * self.args.cavia_lr_inner_multiplier
+        self.context_lr = self.args.lr[0] * self.args.cavia_lr_inner_multiplier
 
         # Hack for tracking in between functions without copying a bunch more code
         self.meta_gradient = None
@@ -196,11 +191,3 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         super().inference_step(
             generator, models, sample, prefix_tokens, constraints
         )
-
-    @property
-    def src_lang_idx_dict(self):
-        return {lang: lang_idx for lang_idx, lang in enumerate(self.src_langs)}
-
-    @property
-    def tgt_lang_idx_dict(self):
-        return {lang: lang_idx for lang_idx, lang in enumerate(self.tgt_langs)}
