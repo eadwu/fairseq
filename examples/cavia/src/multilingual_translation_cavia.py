@@ -178,8 +178,23 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
     def inference_step(
         self, generator, models, sample, prefix_tokens=None, constraints=None
     ):
-        raise NotImplementedError(
-            "Inference is not supported with meta-learning"
+        lang_pair = f"{self.args.source_lang}-${self.args.target_lang}"
+
+        # Set language pair index
+        lang_pair_idx = [
+            i
+            for i, lp in enumerate(self.model_lang_pairs)
+            if lp == lang_pair
+        ]
+
+        assert len(lang_pair_idx) == 1
+        lang_pair_idx = lang_pair_idx[0]
+
+        for model in models:
+            model.decoder.set_lang_pair_idx(lang_pair_idx)
+
+        super().inference_step(
+            generator, models, sample, prefix_tokens, constraints
         )
 
     @property
