@@ -71,7 +71,7 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
 
         # BatchEnsemble lifelong learning
         ## Which task should update the shared parameters
-        self.batch_ensemble_root = getattr(args, "batch_ensemble_root", 0)
+        self.batch_ensemble_root = getattr(args, "batch_ensemble_root", -1)
 
         # Initialize context parameters, BatchEnsemble r_i, s_i, and b_i
         # r_i is the column vector

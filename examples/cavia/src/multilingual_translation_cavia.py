@@ -13,7 +13,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         MultilingualTranslationTask.add_args(parser)
         # fmt: off
         # args for Training with BatchEnsemble
-        parser.add_argument('--batch-ensemble-root', type=int, default=0,
+        parser.add_argument('--batch-ensemble-root', type=int, default=-1,
                             help='Batch Ensemble root task (0-based) for lifelong learning')
         # args for Meta-Training with CAVIA
         parser.add_argument('--cavia-inner-updates', type=int, default=1,
