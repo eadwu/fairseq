@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from torch import Tensor
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from fairseq.models.transformer import TransformerDecoder
 from fairseq.modules import TransformerDecoderLayer
