@@ -101,8 +101,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         for i in range(len(task_gradients)):
             self.meta_gradient[i] += task_gradients[i].detach().clamp_(-10, 10)
 
-
-        optimizer.step()
         model.models[lang_pair].decoder.reset_context_parameters()
 
         return loss, sample_size, logging_output
