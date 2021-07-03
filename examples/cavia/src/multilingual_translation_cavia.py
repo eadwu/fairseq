@@ -74,16 +74,20 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             loss *= 0
 
         for _ in range(self.args.cavia_inner_updates):
-            # Compute task_gradients with respect to context parameters
-            task_gradients = torch.autograd.grad(
-                loss,
-                model.models[lang_pair].decoder.context_parameters(lang_pair_idx),
-                create_graph=not self.args.cavia_first_order
-            )[0]
+            context_parameters = model.models[lang_pair].decoder.context_parameters(lang_pair_idx)
 
-            # Needs to be detached in the case of multi-order task_gradients
-            # using gradient descent
-            model.context_params -= self.context_lr * task_gradients.detach()
+            # Slower but at least this is at least more correct without verification
+            for c_param in context_parameters:
+                # Compute task_gradients with respect to context parameter
+                task_gradients = torch.autograd.grad(
+                    loss,
+                    c_param,
+                    create_graph=not self.args.cavia_first_order
+                )[0]
+
+                # Needs to be detached in the case of multi-order task_gradients
+                # using gradient descent
+                c_param -= self.context_lr * task_gradients.detach()
 
             # Recompute loss after context parameter update
             loss, sample_size, logging_output = criterion(
@@ -125,6 +129,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         return agg_loss, agg_sample_size, agg_logging_output
 
     def _per_lang_pair_valid_loss(self, lang_pair, model, criterion, sample):
+        # Set language pair index
         lang_pair_idx = [
             i
             for i, lp in enumerate(self.model_lang_pairs)
@@ -133,25 +138,35 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         assert len(lang_pair_idx) == 1
         lang_pair_idx = lang_pair_idx[0]
-
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
 
+        # Reset context parameters on every new task
+        ## Since context parameters are only reset in the beginning and the
+        ## model was implemented in such a way that context parameters are
+        ## independent from one another, this allows for the context parameters
+        ## to be saved as buffers in the model.
         model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
+
+        # Calculate loss with shared parameters
         loss, sample_size, logging_output = criterion(
             model.models[lang_pair], sample[lang_pair]
         )
 
         for _ in range(self.args.cavia_inner_updates):
-            # Compute task_gradients with respect to context parameters
-            task_gradients = torch.autograd.grad(
-                loss,
-                model.models[lang_pair].decoder.context_parameters(lang_pair_idx),
-                create_graph=not self.args.cavia_first_order
-            )[0]
+            context_parameters = model.models[lang_pair].decoder.context_parameters(lang_pair_idx)
 
-            # Needs to be detached in the case of multi-order task_gradients
-            # using gradient descent
-            model.context_params -= self.context_lr * task_gradients.detach()
+            # Slower but at least this is at least more correct without verification
+            for c_param in context_parameters:
+                # Compute task_gradients with respect to context parameter
+                task_gradients = torch.autograd.grad(
+                    loss,
+                    c_param,
+                    create_graph=not self.args.cavia_first_order
+                )[0]
+
+                # Needs to be detached in the case of multi-order task_gradients
+                # using gradient descent
+                c_param -= self.context_lr * task_gradients.detach()
 
             # Recompute loss after context parameter update
             loss, sample_size, logging_output = criterion(
