@@ -62,8 +62,10 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         lang_pair_idx = lang_pair_idx[0]
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
 
-        # Calculate loss with shared parameters
+        # Reset context parameters on every new task
         model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
+
+        # Calculate loss with shared parameters
         loss, sample_size, logging_output = criterion(
             model.models[lang_pair], sample[lang_pair]
         )
@@ -101,8 +103,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         for i in range(len(task_gradients)):
             self.meta_gradient[i] += task_gradients[i].detach().clamp_(-10, 10)
 
+        # Flush context parameters just in case
         model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
-
         return loss, sample_size, logging_output
 
     def train_step(
