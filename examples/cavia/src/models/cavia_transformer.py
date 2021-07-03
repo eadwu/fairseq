@@ -26,9 +26,9 @@ class CAVIATransformerDecoder(TransformerDecoder):
             ]
         )
 
-    def set_lang_idx(self, lang_idx):
+    def set_lang_pair_idx(self, lang_pair_idx):
         for layer in self.layers:
-            layer.set_lang_idx(lang_idx)
+            layer.set_lang_pair_idx(lang_pair_idx)
 
     def _build_decoder_layer(self, args, no_encoder_attn=False, idx=None):
         return CAVIATransformerDecoderLayer(
@@ -61,7 +61,7 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
     ):
         super().__init__(args, no_encoder_attn, add_bias_kv, add_zero_attn)
 
-        self.lang_idx = None
+        self.lang_pair_idx = None
 
         # The number of tasks is the number of language pairs
         self.lang_pairs = args.lang_pairs
@@ -76,8 +76,8 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         # Initialize context parameters, BatchEnsemble r_i, s_i, and b_i
         self.reset_context_parameters()
 
-    def set_lang_idx(self, lang_idx):
-        self.lang_idx = lang_idx
+    def set_lang_pair_idx(self, lang_pair_idx):
+        self.lang_pair_idx = lang_pair_idx
 
     def context_parameters(self):
         return [
@@ -243,15 +243,15 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
                 param.requires_grad_(cond)
 
         # Independent r_i and s_i for each lang_pair
-        r_i = self.r_i[self.lang_idx]
-        s_i = self.s_i[self.lang_idx]
+        r_i = self.r_i[self.lang_pair_idx]
+        s_i = self.s_i[self.lang_pair_idx]
         w_i = r_i @ s_i.T
         # Set gradient on shared weights based on lifelong learning
-        fc1_set_grad(self.lang_idx == self.batch_ensemble_root)
+        fc1_set_grad(self.lang_pair_idx == self.batch_ensemble_root)
         W = self.fc1.weight * w_i
         x = x @ W.T
 
-        b_i = self.b_i[self.lang_idx]
+        b_i = self.b_i[self.lang_pair_idx]
         x = x + b_i
 
         x = self.activation_fn(x)

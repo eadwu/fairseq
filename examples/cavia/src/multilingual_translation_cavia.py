@@ -60,7 +60,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         assert len(lang_pair_idx) == 1
         lang_pair_idx = lang_pair_idx[0]
-        model.models[lang_pair].decoder.set_lang_idx(lang_pair_idx)
+        model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
 
         # Calculate loss with shared parameters
         model.models[lang_pair].decoder.reset_context_parameters()
@@ -132,7 +132,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         assert len(lang_pair_idx) == 1
         lang_pair_idx = lang_pair_idx[0]
 
-        model.models[lang_pair].decoder.set_lang_idx(lang_pair_idx)
+        model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
 
         model.models[lang_pair].decoder.reset_context_parameters()
         loss, sample_size, logging_output = criterion(
