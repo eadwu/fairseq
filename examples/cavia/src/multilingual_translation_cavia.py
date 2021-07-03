@@ -63,7 +63,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
 
         # Calculate loss with shared parameters
-        model.models[lang_pair].decoder.reset_context_parameters()
+        model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
         loss, sample_size, logging_output = criterion(
             model.models[lang_pair], sample[lang_pair]
         )
@@ -75,7 +75,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             # Compute task_gradients with respect to context parameters
             task_gradients = torch.autograd.grad(
                 loss,
-                model.models[lang_pair].decoder.context_parameters(),
+                model.models[lang_pair].decoder.context_parameters(lang_pair_idx),
                 create_graph=not self.args.cavia_first_order
             )[0]
 
@@ -101,7 +101,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         for i in range(len(task_gradients)):
             self.meta_gradient[i] += task_gradients[i].detach().clamp_(-10, 10)
 
-        model.models[lang_pair].decoder.reset_context_parameters()
+        model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
 
         return loss, sample_size, logging_output
 
@@ -134,7 +134,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
 
-        model.models[lang_pair].decoder.reset_context_parameters()
+        model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
         loss, sample_size, logging_output = criterion(
             model.models[lang_pair], sample[lang_pair]
         )
@@ -143,7 +143,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             # Compute task_gradients with respect to context parameters
             task_gradients = torch.autograd.grad(
                 loss,
-                model.models[lang_pair].decoder.context_parameters(),
+                model.models[lang_pair].decoder.context_parameters(lang_pair_idx),
                 create_graph=not self.args.cavia_first_order
             )[0]
 
