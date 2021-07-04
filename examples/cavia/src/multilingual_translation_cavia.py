@@ -71,7 +71,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         context_parameters = [
             parameters
-            for name, parameters in model.models[lang_pair].parameters()
+            for name, parameters in model.models[lang_pair].named_parameters()
             if "context_param" in name and (f"r_{lang_pair_idx}" in name or f"s_{lang_pair_idx}" in name or f"b_{lang_pair_idx}" in name)
         ]
 
@@ -116,7 +116,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             if "context_param" not in name
         ]
 
-        self.meta_gradient = [0 for _ in len(self.shared_parameters)]
+        self.meta_gradient = [0 for _ in range(len(self.shared_parameters))]
 
         agg_loss, agg_sample_size, agg_logging_output = super().train_step(
             sample, model, criterion, optimizer, update_num, ignore_grad
@@ -155,7 +155,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         context_parameters = [
             parameters
-            for name, parameters in model.models[lang_pair].parameters()
+            for name, parameters in model.models[lang_pair].named_parameters()
             if "context_param" in name and (f"r_{lang_pair_idx}" in name or f"s_{lang_pair_idx}" in name or f"b_{lang_pair_idx}" in name)
         ]
 
