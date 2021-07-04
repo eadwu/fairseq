@@ -36,6 +36,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         self.eval_lang_pairs = self.lang_pairs
         self.model_lang_pairs = self.lang_pairs
         assert len(self.lang_pairs) > 0
+        self.n_tasks = float(len(self.lang_pairs))
 
         # Learning rate for context parameters
         self.context_lr = self.args.lr[0] * self.args.cavia_lr_inner_multiplier
@@ -44,9 +45,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         self.meta_gradient = None
         self.shared_parameters = None
 
-    def _per_lang_pair_train_loss(
-        self, lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
-    ):
+    def _get_lang_pair_idx(self, lang_pair, model):
         # Set language pair index
         lang_pair_idx = [
             i
@@ -56,6 +55,24 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         assert len(lang_pair_idx) == 1
         lang_pair_idx = lang_pair_idx[0]
+        return lang_pair_idx
+
+    def _get_context_parameters(self, lang_pair_idx, model):
+        return [
+            parameters
+            for name, parameters in model.named_parameters()
+            if "context_param" in name and (
+                f"r_{lang_pair_idx}" in name or
+                f"s_{lang_pair_idx}" in name or
+                f"b_{lang_pair_idx}" in name
+            )
+        ]
+
+    def _per_lang_pair_train_loss(
+        self, lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
+    ):
+        # Update language pair index
+        lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
 
         # Reset context parameters on every new task
@@ -69,24 +86,25 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         if ignore_grad:
             loss *= 0
 
-        context_parameters = [
-            parameters
-            for name, parameters in model.models[lang_pair].named_parameters()
-            if "context_param" in name and (f"r_{lang_pair_idx}" in name or f"s_{lang_pair_idx}" in name or f"b_{lang_pair_idx}" in name)
-        ]
+        context_parameters = self._get_context_parameters(
+            lang_pair_idx, model.models[lang_pair]
+        )
 
         for _ in range(self.args.cavia_inner_updates):
-            # Compute task_gradients with respect to context parameter
+            # Compute task_gradients with respect to context parameters
             task_gradients = torch.autograd.grad(
                 loss,
                 context_parameters,
                 create_graph=not self.args.cavia_first_order
             )
 
-            # Gradient descent shouldn't be recorded as a calculation for the
-            # graph
-            for i, gradient in enumerate(task_gradients):
-                context_parameters[i] = context_parameters[i] - self.context_lr * gradient
+            # Gradient Descent on context parameters
+            for i, _ in enumerate(task_gradients):
+                gradient = task_gradients[i]
+                if self.args.cavia_first_order:
+                    gradient = gradient.detach()
+                gradient = self.context_lr * gradient
+                context_parameters[i] = context_parameters[i] - gradient
 
             # Recompute loss after context parameter update
             loss, sample_size, logging_output = criterion(
@@ -99,9 +117,9 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         # Compute task_gradients with respect to the shared [model] parameters
         task_gradients = torch.autograd.grad(loss, self.shared_parameters)
 
-        # Clamp and assign meta-gradient
+        # Update meta-gradient
         for i in range(len(task_gradients)):
-            self.meta_gradient[i] += task_gradients[i].detach().clamp_(-10, 10)
+            self.meta_gradient[i] += task_gradients[i].detach()
 
         # Flush context parameters just in case
         model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
@@ -124,29 +142,23 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         )
 
         # Apply meta-gradient to shared parameters
+        optimizer.zero_grad()
         for i, param in enumerate(self.shared_parameters()):
-            param.grad = self.meta_gradient[i] / len(self.model_lang_pairs)
+            param.grad = self.meta_gradient[i] / self.n_tasks
+            param.grad.data.clamp_(-10, 10)
         optimizer.step()
 
         return agg_loss, agg_sample_size, agg_logging_output
 
     def _per_lang_pair_valid_loss(self, lang_pair, model, criterion, sample):
-        # Set language pair index
-        lang_pair_idx = [
-            i
-            for i, lp in enumerate(self.model_lang_pairs)
-            if lp == lang_pair
-        ]
-
-        assert len(lang_pair_idx) == 1
-        lang_pair_idx = lang_pair_idx[0]
+        # Update language pair index
+        lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
 
-        # Reset context parameters on every new task
-        ## Since context parameters are only reset in the beginning and the
-        ## model was implemented in such a way that context parameters are
-        ## independent from one another, this allows for the context parameters
-        ## to be saved as buffers in the model.
+        # Since context parameters are only reset in the beginning and the
+        # model was implemented in such a way that context parameters are
+        # independent from one another, this allows for the context parameters
+        # to be saved as part of the model for independent evaluation.
         model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
 
         # Calculate loss with current parameters
@@ -154,24 +166,25 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             model.models[lang_pair], sample[lang_pair]
         )
 
-        context_parameters = [
-            parameters
-            for name, parameters in model.models[lang_pair].named_parameters()
-            if "context_param" in name and (f"r_{lang_pair_idx}" in name or f"s_{lang_pair_idx}" in name or f"b_{lang_pair_idx}" in name)
-        ]
+        context_parameters = self._get_context_parameters(
+            lang_pair_idx, model.models[lang_pair]
+        )
 
         for _ in range(self.args.cavia_inner_updates):
-            # Compute task_gradients with respect to context parameter
+            # Compute task_gradients with respect to context parameters
             task_gradients = torch.autograd.grad(
                 loss,
                 context_parameters,
                 create_graph=not self.args.cavia_first_order
             )
 
-            # Gradient descent shouldn't be recorded as a calculation for the
-            # graph
-            for i, gradient in enumerate(task_gradients):
-                context_parameters[i] = context_parameters[i] - self.context_lr * gradient
+            # Gradient Descent on context parameters
+            for i, _ in enumerate(task_gradients):
+                gradient = task_gradients[i]
+                if self.args.cavia_first_order:
+                    gradient = gradient.detach()
+                gradient = self.context_lr * gradient
+                context_parameters[i] = context_parameters[i] - gradient
 
             # Recompute loss after context parameter update
             loss, sample_size, logging_output = criterion(
@@ -185,16 +198,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
     ):
         lang_pair = f"{self.args.source_lang}-${self.args.target_lang}"
 
-        # Set language pair index
-        lang_pair_idx = [
-            i
-            for i, lp in enumerate(self.model_lang_pairs)
-            if lp == lang_pair
-        ]
-
-        assert len(lang_pair_idx) == 1
-        lang_pair_idx = lang_pair_idx[0]
-
+        # Update language pair index
+        lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         for model in models:
             model.decoder.set_lang_pair_idx(lang_pair_idx)
 
