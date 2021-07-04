@@ -129,10 +129,11 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         ]
 
     def reset_context_parameters(self, lang_pair_idx):
-        # Zero out tensors
-        self.r_i[lang_pair_idx] *= 0
-        self.s_i[lang_pair_idx] *= 0
-        self.b_i[lang_pair_idx] *= 0
+        # Zero out tensors, don't calculate gradients with this operation
+        with torch.no_grad():
+            self.r_i[lang_pair_idx] *= 0
+            self.s_i[lang_pair_idx] *= 0
+            self.b_i[lang_pair_idx] *= 0
         # Reset gradient
         self.r_i[lang_pair_idx].grad = None
         self.s_i[lang_pair_idx].grad = None
