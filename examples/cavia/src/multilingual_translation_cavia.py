@@ -85,11 +85,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
             # Gradient descent shouldn't be recorded as a calculation for the
             # graph
-            with torch.no_grad():
-                # Needs to be detached in the case of multi-order task_gradients
-                # using gradient descent
-                for i, gradient in enumerate(task_gradients):
-                    context_parameters[i] -= self.context_lr * gradient.detach()
+            for i, gradient in enumerate(task_gradients):
+                context_parameters[i] = context_parameters[i] - self.context_lr * gradient
 
             # Recompute loss after context parameter update
             loss, sample_size, logging_output = criterion(
@@ -173,11 +170,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
             # Gradient descent shouldn't be recorded as a calculation for the
             # graph
-            with torch.no_grad():
-                # Needs to be detached in the case of multi-order task_gradients
-                # using gradient descent
-                for i, gradient in enumerate(task_gradients):
-                    context_parameters[i] -= self.context_lr * gradient.detach()
+            for i, gradient in enumerate(task_gradients):
+                context_parameters[i] = context_parameters[i] - self.context_lr * gradient
 
             # Recompute loss after context parameter update
             loss, sample_size, logging_output = criterion(
