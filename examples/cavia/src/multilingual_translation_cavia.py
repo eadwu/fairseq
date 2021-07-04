@@ -45,7 +45,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         self.meta_gradient = None
         self.shared_parameters = None
 
-    def _get_lang_pair_idx(self, lang_pair, model):
+    def _get_lang_pair_idx(self, lang_pair):
         # Set language pair index
         lang_pair_idx = [
             i
