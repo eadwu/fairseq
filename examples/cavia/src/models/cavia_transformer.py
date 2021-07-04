@@ -233,20 +233,17 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         if self.normalize_before:
             x = self.final_layer_norm(x)
 
-        def fc1_set_grad(cond):
-            for param in self.fc1.parameters():
-                param.requires_grad_(cond)
-
-        # Independent r_i and s_i for each lang_pair
+        # Independent r_i, s_i, and b_i for each language pair
         r_i = self.r_i[self.lang_pair_idx]
         s_i = self.s_i[self.lang_pair_idx]
+        b_i = self.b_i[self.lang_pair_idx]
         w_i = r_i @ s_i.T
         # Set gradient on shared weights based on lifelong learning
-        fc1_set_grad(self.lang_pair_idx == self.batch_ensemble_root)
-        W = self.fc1.weight * w_i
+        with torch.set_grad_enabled(
+            self.lang_pair_idx == self.batch_ensemble_root
+        ):
+            W = self.fc1.weight * w_i
         x = x @ W.T
-
-        b_i = self.b_i[self.lang_pair_idx]
         x = x + b_i
 
         x = self.activation_fn(x)
