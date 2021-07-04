@@ -107,6 +107,11 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
 
     def set_lang_pair_idx(self, lang_pair_idx):
         self.lang_pair_idx = lang_pair_idx
+        # Set gradient on shared weights based on lifelong learning
+        for param in self.fc1.parameters():
+            param.requires_grad_(
+                self.lang_pair_idx == self.batch_ensemble_root
+            )
 
     def reset_context_parameters(self, lang_pair_idx):
         # Zero out tensors, don't calculate gradients with this operation
@@ -238,11 +243,7 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         s_i = self.s_i[self.lang_pair_idx]
         b_i = self.b_i[self.lang_pair_idx]
         w_i = r_i @ s_i.T
-        # Set gradient on shared weights based on lifelong learning
-        with torch.set_grad_enabled(
-            self.lang_pair_idx == self.batch_ensemble_root
-        ):
-            W = self.fc1.weight * w_i
+        W = self.fc1.weight * w_i
         x = x @ W.T
         x = x + b_i
 
