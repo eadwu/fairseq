@@ -61,6 +61,10 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
             self.lang_pairs = self.lang_pairs.split(",")
         self.n_tasks = len(self.lang_pairs)
 
+        # Ol' sadness is much greatly appreciated, bias isn't used anyway
+        delattr(self.fc1, "bias")
+        assert not hasattr(self.fc1, "bias")
+
         # BatchEnsemble lifelong learning
         ## Which task should update the shared parameters
         self.batch_ensemble_root = getattr(args, "batch_ensemble_root", -1)
