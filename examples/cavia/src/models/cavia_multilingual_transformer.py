@@ -20,11 +20,9 @@ class CAVIAMultilingualTransformer(MultilingualTransformerModel):
         MultilingualTransformerModel.add_args(parser)
 
     @classmethod
-    def _get_module_class(cls, is_encoder, args, lang_dict, embed_tokens):
-        if is_encoder:
-            return TransformerEncoder(args, lang_dict, embed_tokens)
-        else:
-            return CAVIATransformerDecoder(args, lang_dict, embed_tokens)
+    def _get_module_class(cls, is_encoder, args, lang_dict, embed_tokens, langs):
+        module_class = TransformerEncoder if is_encoder else CAVIATransformerDecoder
+        return module_class(args, lang_dict, embed_tokens)
 
 
 @register_model_architecture(
