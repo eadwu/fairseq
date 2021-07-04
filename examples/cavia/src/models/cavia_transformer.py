@@ -35,14 +35,6 @@ class CAVIATransformerDecoder(TransformerDecoder):
             args, idx, no_encoder_attn=no_encoder_attn
         )
 
-    def context_parameters(self, lang_pair_idx):
-        return [
-            param
-            for layer in self.layers
-            for context_params in layer.context_parameters(lang_pair_idx)
-            for param in context_params
-        ]
-
     def reset_context_parameters(self, lang_pair_idx):
         for layer in self.layers:
             layer.reset_context_parameters(lang_pair_idx)
@@ -76,41 +68,38 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         # Initialize context parameters, BatchEnsemble r_i, s_i, and b_i
         # r_i is the column vector
         self.r_i = [
-            torch.zeros(
+            nn.Parameter(torch.zeros(
                 args.decoder_ffn_embed_dim, 1,
                 dtype=torch.float16 if args.fp16 else torch.float32,
                 device='cuda' if torch.cuda.is_available() else 'cpu',
-                requires_grad=True,
-            )
+            ))
             for _ in range(self.n_tasks)
         ]
         # s_i is the row vector
         self.s_i = [
-            torch.zeros(
+            nn.Parameter(torch.zeros(
                 self.embed_dim, 1,
                 dtype=torch.float16 if args.fp16 else torch.float32,
                 device='cuda' if torch.cuda.is_available() else 'cpu',
-                requires_grad=True,
-            )
+            ))
             for _ in range(self.n_tasks)
         ]
         # b_i is the bias vectors
         self.b_i = [
-            torch.zeros(
-                args.decoder_ffn_embed_dim, 1,
+            nn.Parameter(torch.zeros(
+                args.decoder_ffn_embed_dim,
                 dtype=torch.float16 if args.fp16 else torch.float32,
                 device='cuda' if torch.cuda.is_available() else 'cpu',
-                requires_grad=True,
-            )
+            ))
             for _ in range(self.n_tasks)
         ]
 
         for i in range(self.n_tasks):
             # Register as buffers so that parameters are saved but not included
             # into the parameters() iterator
-            self.register_buffer(f"{idx}-r_{i}", self.r_i[i])
-            self.register_buffer(f"{idx}-s_{i}", self.s_i[i])
-            self.register_buffer(f"{idx}-b_{i}", self.b_i[i])
+            self.register_parameter(f"context_param-{idx}-r_{i}", self.r_i[i])
+            self.register_parameter(f"context_param-{idx}-s_{i}", self.s_i[i])
+            self.register_parameter(f"context_param-{idx}-b_{i}", self.b_i[i])
             # Ensure BatchEnsemble parameters can calculate their gradients
             self.r_i[i].requires_grad = True
             self.s_i[i].requires_grad = True
@@ -118,15 +107,6 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
 
     def set_lang_pair_idx(self, lang_pair_idx):
         self.lang_pair_idx = lang_pair_idx
-
-    def context_parameters(self, lang_pair_idx):
-        return [
-            (
-                self.r_i[lang_pair_idx].parameters(),
-                self.s_i[lang_pair_idx].parameters(),
-                self.b_i[lang_pair_idx].parameters(),
-            )
-        ]
 
     def reset_context_parameters(self, lang_pair_idx):
         # Zero out tensors, don't calculate gradients with this operation

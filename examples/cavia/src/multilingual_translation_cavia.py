@@ -42,6 +42,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         # Hack for tracking in between functions without copying a bunch more code
         self.meta_gradient = None
+        self.shared_parameters = None
 
     def _per_lang_pair_train_loss(
         self, lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
@@ -60,7 +61,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         # Reset context parameters on every new task
         model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
 
-        # Calculate loss with shared parameters
+        # Calculate loss with current parameters
         loss, sample_size, logging_output = criterion(
             model.models[lang_pair], sample[lang_pair]
         )
@@ -68,21 +69,23 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         if ignore_grad:
             loss *= 0
 
+        context_parameters = [
+            parameters
+            for name, parameters in model.models[lang_pair].parameters()
+            if "context_param" in name and (f"r_{lang_pair_idx}" in name or f"s_{lang_pair_idx}" in name or f"b_{lang_pair_idx}" in name)
+        ]
+
         for _ in range(self.args.cavia_inner_updates):
-            context_parameters = model.models[lang_pair].decoder.context_parameters(lang_pair_idx)
+            # Compute task_gradients with respect to context parameter
+            task_gradients = torch.autograd.grad(
+                loss,
+                context_parameters,
+                create_graph=not self.args.cavia_first_order
+            )[0]
 
-            # Slower but at least this is at least more correct without verification
-            for c_param in context_parameters:
-                # Compute task_gradients with respect to context parameter
-                task_gradients = torch.autograd.grad(
-                    loss,
-                    c_param,
-                    create_graph=not self.args.cavia_first_order
-                )[0]
-
-                # Needs to be detached in the case of multi-order task_gradients
-                # using gradient descent
-                c_param -= self.context_lr * task_gradients.detach()
+            # Needs to be detached in the case of multi-order task_gradients
+            # using gradient descent
+            context_parameters -= self.context_lr * task_gradients.detach()
 
             # Recompute loss after context parameter update
             loss, sample_size, logging_output = criterion(
@@ -93,10 +96,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
                 loss *= 0
 
         # Compute task_gradients with respect to the shared [model] parameters
-        task_gradients = torch.autograd.grad(
-            loss,
-            model.models[lang_pair].parameters()
-        )
+        task_gradients = torch.autograd.grad(loss, self.shared_parameters)
 
         # Clamp and assign meta-gradient
         for i in range(len(task_gradients)):
@@ -110,14 +110,20 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         self, sample, model, criterion, optimizer, update_num, ignore_grad=False
     ):
         base_model = model.models[self.model_lang_pairs[0]]
-        self.meta_gradient = [0 for _, __ in enumerate(base_model.parameters())]
+        self.shared_parameters = [
+            parameters
+            for name, parameters in base_model.named_parameters()
+            if "context_param" not in name
+        ]
+
+        self.meta_gradient = [0 for _ in len(self.shared_parameters)]
 
         agg_loss, agg_sample_size, agg_logging_output = super().train_step(
             sample, model, criterion, optimizer, update_num, ignore_grad
         )
 
         # Apply meta-gradient to shared parameters
-        for i, param in enumerate(base_model.parameters()):
+        for i, param in enumerate(self.shared_parameters()):
             param.grad = self.meta_gradient[i] / len(self.model_lang_pairs)
         optimizer.step()
 
@@ -142,26 +148,28 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         ## to be saved as buffers in the model.
         model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
 
-        # Calculate loss with shared parameters
+        # Calculate loss with current parameters
         loss, sample_size, logging_output = criterion(
             model.models[lang_pair], sample[lang_pair]
         )
 
+        context_parameters = [
+            parameters
+            for name, parameters in model.models[lang_pair].parameters()
+            if "context_param" in name and (f"r_{lang_pair_idx}" in name or f"s_{lang_pair_idx}" in name or f"b_{lang_pair_idx}" in name)
+        ]
+
         for _ in range(self.args.cavia_inner_updates):
-            context_parameters = model.models[lang_pair].decoder.context_parameters(lang_pair_idx)
+            # Compute task_gradients with respect to context parameter
+            task_gradients = torch.autograd.grad(
+                loss,
+                context_parameters,
+                create_graph=not self.args.cavia_first_order
+            )[0]
 
-            # Slower but at least this is at least more correct without verification
-            for c_param in context_parameters:
-                # Compute task_gradients with respect to context parameter
-                task_gradients = torch.autograd.grad(
-                    loss,
-                    c_param,
-                    create_graph=not self.args.cavia_first_order
-                )[0]
-
-                # Needs to be detached in the case of multi-order task_gradients
-                # using gradient descent
-                c_param -= self.context_lr * task_gradients.detach()
+            # Needs to be detached in the case of multi-order task_gradients
+            # using gradient descent
+            context_parameters -= self.context_lr * task_gradients.detach()
 
             # Recompute loss after context parameter update
             loss, sample_size, logging_output = criterion(
