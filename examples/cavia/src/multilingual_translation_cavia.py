@@ -121,12 +121,22 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             if ignore_grad:
                 loss *= 0
 
+        # Filter out Tensors that don't need gradients for lifelong learning
+        shared_parameters = {
+            name: param
+            for name, param in self.shared_parameters
+            if param.requires_grad
+        }
+        shared_parameters_n = [name for name in shared_parameters.keys()]
+        shared_parameters_p = [shared_parameters[n] for n in shared_parameters_n]
+
         # Compute task_gradients with respect to the shared [model] parameters
-        task_gradients = torch.autograd.grad(loss, self.shared_parameters)
+        task_gradients = torch.autograd.grad(loss, shared_parameters_p)
 
         # Update meta-gradient
         for i in range(len(task_gradients)):
-            self.meta_gradient[i] += task_gradients[i].detach()
+            param_n = shared_parameters_n[i]
+            self.meta_gradient[param_n] += task_gradients[i].detach()
 
         # Flush context parameters just in case
         model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
@@ -136,13 +146,13 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         self, sample, model, criterion, optimizer, update_num, ignore_grad=False
     ):
         base_model = model.models[self.model_lang_pairs[0]]
-        self.shared_parameters = [
-            parameters
+        self.shared_parameters = {
+            name: parameters
             for name, parameters in base_model.named_parameters()
             if "context_param" not in name
-        ]
+        }
 
-        self.meta_gradient = [0 for _ in range(len(self.shared_parameters))]
+        self.meta_gradient = {name: 0 for name, _ in self.shared_parameters}
 
         agg_loss, agg_sample_size, agg_logging_output = super().train_step(
             sample, model, criterion, optimizer, update_num, ignore_grad
@@ -150,8 +160,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         # Apply meta-gradient to shared parameters
         optimizer.zero_grad()
-        for i, param in enumerate(self.shared_parameters()):
-            param.grad = self.meta_gradient[i] / self.n_tasks
+        for name, param in self.shared_parameters:
+            param.grad = self.meta_gradient[name] / self.n_tasks
             param.grad.data.clamp_(-10, 10)
         optimizer.step()
 
