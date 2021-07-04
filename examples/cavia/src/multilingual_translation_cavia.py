@@ -110,7 +110,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         self, sample, model, criterion, optimizer, update_num, ignore_grad=False
     ):
         base_model = model.models[self.model_lang_pairs[0]]
-        self.meta_gradient = [0 for _ in range(len(base_model.parameters()))]
+        self.meta_gradient = [0 for _, __ in enumerate(base_model.parameters())]
 
         agg_loss, agg_sample_size, agg_logging_output = super().train_step(
             sample, model, criterion, optimizer, update_num, ignore_grad
