@@ -124,7 +124,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         # Filter out Tensors that don't need gradients for lifelong learning
         shared_parameters = {
             name: param
-            for name, param in self.shared_parameters
+            for name, param in self.shared_parameters.items()
             if param.requires_grad
         }
         shared_parameters_n = [name for name in shared_parameters.keys()]
@@ -152,7 +152,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             if "context_param" not in name
         }
 
-        self.meta_gradient = {name: 0 for name, _ in self.shared_parameters}
+        self.meta_gradient = {name: 0 for name in self.shared_parameters}
 
         agg_loss, agg_sample_size, agg_logging_output = super().train_step(
             sample, model, criterion, optimizer, update_num, ignore_grad
@@ -160,7 +160,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         # Apply meta-gradient to shared parameters
         optimizer.zero_grad()
-        for name, param in self.shared_parameters:
+        for name, param in self.shared_parameters.items():
             param.grad = self.meta_gradient[name] / self.n_tasks
             param.grad.data.clamp_(-10, 10)
         optimizer.step()
