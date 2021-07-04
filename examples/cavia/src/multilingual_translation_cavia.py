@@ -3,6 +3,8 @@ import torch
 from fairseq.tasks import register_task
 from fairseq.tasks.multilingual_translation import MultilingualTranslationTask
 
+from .models.cavia_multilingual_transformer import CAVIAMultilingualTransformer
+
 
 @register_task("multilingual_translation_cavia")
 class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
@@ -71,6 +73,11 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
     def _per_lang_pair_train_loss(
         self, lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
     ):
+        # Only one type of supported model
+        assert isinstance(
+            model.models[lang_pair], CAVIAMultilingualTransformer
+        )
+
         # Update language pair index
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
@@ -151,6 +158,11 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         return agg_loss, agg_sample_size, agg_logging_output
 
     def _per_lang_pair_valid_loss(self, lang_pair, model, criterion, sample):
+        # Only one type of supported model
+        assert isinstance(
+            model.models[lang_pair], CAVIAMultilingualTransformer
+        )
+
         # Update language pair index
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
@@ -201,6 +213,11 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         # Update language pair index
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         for model in models:
+            # Only one type of supported model
+            assert isinstance(
+                model, CAVIAMultilingualTransformer
+            )
+
             model.decoder.set_lang_pair_idx(lang_pair_idx)
 
         super().inference_step(
