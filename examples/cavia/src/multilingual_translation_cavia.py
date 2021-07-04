@@ -40,6 +40,12 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         assert len(self.lang_pairs) > 0
         self.n_tasks = float(len(self.lang_pairs))
 
+        # Validate argument batch_ensemble_root
+        assert args.batch_ensemble_root == -1 or (
+            args.batch_ensemble_root >= 0 and
+            args.batch_ensemble_root < len(self.lang_pairs)
+        )
+
         # Learning rate for context parameters
         self.context_lr = self.args.lr[0] * self.args.cavia_lr_inner_multiplier
 
