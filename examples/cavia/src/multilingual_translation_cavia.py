@@ -131,7 +131,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
     def _sync_shared_context_references(self, root_model):
         for i, linked_params in enumerate(self.shared_context_parameters):
             root_param = self.context_parameters[i]
-            ref = _get_module_by_path(root_param)
+            ref = _get_module_by_path(root_model, root_param)
             for param in linked_params:
                 _set_module_by_path(root_model, param, ref)
 
