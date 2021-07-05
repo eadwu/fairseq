@@ -30,10 +30,10 @@ class CAVIAMultilingualTransformer(MultilingualTransformerModel):
 def cavia_multilingual_architecture(args):
     multilingual_transformer_iwslt_de_en(args)
 
-    args.share_encoders = getattr(args, "share_encoders", True)
-    args.share_decoders = getattr(args, "share_decoders", True)
-    args.share_encoder_embeddings = getattr(args, "share_encoder_embeddings", True)
-    args.share_decoder_embeddings = getattr(args, "share_decoder_embeddings", True)
+    args.share_encoders = True
+    args.share_decoders = True
+    args.share_encoder_embeddings = True
+    args.share_decoder_embeddings = True
 
 
 @register_model_architecture(
@@ -43,5 +43,5 @@ def cavia_phat_multilingual_architecture(args):
     cavia_multilingual_architecture(args)
 
     # Latent Depth number of layers
-    args.encoder_layers = getattr(args, "encoder_layers", 12)
-    args.decoder_layers = getattr(args, "decoder_layers", 24)
+    args.encoder_layers = 12
+    args.decoder_layers = 24
