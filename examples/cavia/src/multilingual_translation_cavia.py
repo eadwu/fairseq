@@ -150,6 +150,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
                 nn.Parameter(torch.zeros_like(ref)),
             )
 
+        self._sync_shared_context_references(root_model)
+
     def _per_lang_pair_train_loss(
         self, lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
     ):
