@@ -21,8 +21,8 @@ class CAVIATransformerDecoder(TransformerDecoder):
 
         self.layers = nn.ModuleList(
             [
-                self._build_decoder_layer(args, no_encoder_attn, idx)
-                for idx in range(args.decoder_layers)
+                self._build_decoder_layer(args, no_encoder_attn)
+                for _ in range(args.decoder_layers)
             ]
         )
 
@@ -30,9 +30,9 @@ class CAVIATransformerDecoder(TransformerDecoder):
         for layer in self.layers:
             layer.set_lang_pair_idx(lang_pair_idx)
 
-    def _build_decoder_layer(self, args, no_encoder_attn=False, idx=None):
+    def _build_decoder_layer(self, args, no_encoder_attn=False):
         return CAVIATransformerDecoderLayer(
-            args, idx, no_encoder_attn=no_encoder_attn
+            args, no_encoder_attn=no_encoder_attn
         )
 
     def reset_context_parameters(self, lang_pair_idx):
@@ -46,7 +46,6 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
     def __init__(
         self,
         args,
-        idx,
         no_encoder_attn=False,
         add_bias_kv=False,
         add_zero_attn=False,
@@ -101,9 +100,9 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         for i in range(self.n_tasks):
             # Register as buffers so that parameters are saved but not included
             # into the parameters() iterator
-            self.register_parameter(f"context_param-{idx}-r_{i}", self.r_i[i])
-            self.register_parameter(f"context_param-{idx}-s_{i}", self.s_i[i])
-            self.register_parameter(f"context_param-{idx}-b_{i}", self.b_i[i])
+            self.register_parameter(f"context_param-r_{i}", self.r_i[i])
+            self.register_parameter(f"context_param-s_{i}", self.s_i[i])
+            self.register_parameter(f"context_param-b_{i}", self.b_i[i])
             # Ensure BatchEnsemble parameters can calculate their gradients
             self.r_i[i].requires_grad = True
             self.s_i[i].requires_grad = True
