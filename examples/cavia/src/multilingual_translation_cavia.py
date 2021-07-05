@@ -92,8 +92,15 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         context_p_name = context_p_name[-1] # discard unnecessary stuff
         context_type, context_lang_pair = context_p_name.split("_")
 
+        # Proper type conversion
+        assert decoder_layer.isdigit()
+        decoder_layer = int(decoder_layer)
+
         # Just a check...
+        assert context_lang_pair.isdigit()
+        context_lang_pair = int(context_lang_pair)
         assert context_lang_pair == lang_pair_idx
+
         return decoder_layer, context_type, context_lang_pair
 
     def _per_lang_pair_train_loss(
