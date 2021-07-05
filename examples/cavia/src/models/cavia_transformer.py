@@ -64,10 +64,8 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         ## Which task (language pair) should update the shared parameters
         self.batch_ensemble_root = getattr(args, "batch_ensemble_root", -1)
 
-        # BatchEnsemble r_i, s_i, and b_i
-        self.r_i = None
-        self.s_i = None
-        self.b_i = None
+        # BatchEnsemble current language pair [index]
+        self.lang_pair_idx = None
 
         for i in range(self.n_tasks):
             # Initialize context parameters (BatchEnsemble) for CAVIA
@@ -100,13 +98,7 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
             )
 
     def set_lang_pair_idx(self, lang_pair_idx):
-        # Update BatchEnsemble references
-        self.r_i = getattr(self, f"context_param-r_{lang_pair_idx}")
-        self.s_i = getattr(self, f"context_param-s_{lang_pair_idx}")
-        self.b_i = getattr(self, f"context_param-b_{lang_pair_idx}")
-        assert self.r_i is not None
-        assert self.s_i is not None
-        assert self.b_i is not None
+        self.lang_pair_idx = lang_pair_idx
         # Set gradient on shared weights based on lifelong learning
         self.fc1.requires_grad_(
             self.batch_ensemble_root == -1 or
@@ -228,10 +220,14 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
             x = self.final_layer_norm(x)
 
         # Independent r_i, s_i, and b_i for each language pair
-        w_i = self.r_i @ self.s_i.T
+        r_i = getattr(self, f"context_param-r_{self.lang_pair_idx}")
+        s_i = getattr(self, f"context_param-s_{self.lang_pair_idx}")
+        b_i = getattr(self, f"context_param-b_{self.lang_pair_idx}")
+
+        w_i = r_i @ s_i.T
         W = self.fc1.weight * w_i
         x = x @ W.T
-        x = x + self.b_i
+        x = x + b_i
 
         x = self.activation_fn(x)
         x = self.activation_dropout_module(x)
