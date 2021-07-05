@@ -81,27 +81,12 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             [p for _, p in context_parameters],
         ]
 
-    def _parse_context_module(self, path, lang_pair_idx):
-        # decoder.layers.$DECODER_LAYER.context_param-$TYPE_$LANG_PAIR_IDX
-        module_path = path.split(".")
-        module_path = module_path[2:] # discard unecessary stuff
-
-        decoder_layer = module_path[0]
-        context_p_name = module_path[-1].split("-")
-
-        context_p_name = context_p_name[-1] # discard unnecessary stuff
-        context_type, context_lang_pair = context_p_name.split("_")
-
-        # Proper type conversion
-        assert decoder_layer.isdigit()
-        decoder_layer = int(decoder_layer)
-
-        # Just a check...
-        assert context_lang_pair.isdigit()
-        context_lang_pair = int(context_lang_pair)
-        assert context_lang_pair == lang_pair_idx
-
-        return decoder_layer, context_type, context_lang_pair
+    def _walk_module_path(self, module, path):
+        # models.$LANG_PAIR.decoder.layers.$DECODER_LAYER.context_param-$TYPE_$LANG_PAIR_IDX
+        path = path.split(".")
+        for name in path[:-1]:
+            module = getattr(module, name)
+        return module, path[-1]
 
     def _per_lang_pair_train_loss(
         self, lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
@@ -145,12 +130,12 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
             # Gradient Descent on context parameters
             for i, _ in enumerate(task_gradients):
-                decoder_layer, context_type, _ = self._parse_context_module(
-                    context_n[i], lang_pair_idx
+                decoder_layer, context_param = self._walk_module_path(
+                    model, context_n[i]
                 )
 
-                model.models[lang_pair].decoder._update_context_param(
-                    decoder_layer, context_type, lang_pair_idx,
+                setattr(
+                    decoder_layer, context_param,
                     context_p[i] - self.context_lr * task_gradients[i]
                 )
 
@@ -238,15 +223,15 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
             # Gradient Descent on context parameters
             for i, _ in enumerate(task_gradients):
-                decoder_layer, context_type, _ = self._parse_context_module(
-                    context_n[i], lang_pair_idx
+                decoder_layer, context_param = self._walk_module_path(
+                    model, context_n[i]
                 )
 
                 gradient = task_gradients[i]
                 if self.args.cavia_first_order:
                     gradient = gradient.detach()
-                model.models[lang_pair].decoder._update_context_param(
-                    decoder_layer, context_type, lang_pair_idx,
+                setattr(
+                    decoder_layer, context_param,
                     context_p[i] - self.context_lr * gradient
                 )
 
