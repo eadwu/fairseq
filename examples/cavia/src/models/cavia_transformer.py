@@ -35,6 +35,11 @@ class CAVIATransformerDecoder(TransformerDecoder):
             args, no_encoder_attn=no_encoder_attn
         )
 
+    def _update_context_param(self, layer, param_type, param_idx, value):
+        self.layers[layer]._update_context_param(
+            param_type, param_idx, value
+        )
+
     def reset_context_parameters(self, lang_pair_idx):
         for layer in self.layers:
             layer.reset_context_parameters(lang_pair_idx)
@@ -126,6 +131,17 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         self.r_i[lang_pair_idx].grad = None
         self.s_i[lang_pair_idx].grad = None
         self.b_i[lang_pair_idx].grad = None
+
+    def _update_context_param(self, param_type, param_idx, value):
+        context_params = (
+            self.r_i if param_type == "r" else
+            self.s_i if param_type == "s" else
+            self.b_i if param_type == "b" else
+            None
+        )
+
+        assert context_params is not None
+        context_params[param_idx] = value
 
     def forward(
         self,
