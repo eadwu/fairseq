@@ -101,9 +101,9 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
 
     def set_lang_pair_idx(self, lang_pair_idx):
         # Update BatchEnsemble references
-        self.r_i = getattr(self, f"context_param-r_{lang_pair_idx}") or None
-        self.s_i = getattr(self, f"context_param-s_{lang_pair_idx}") or None
-        self.b_i = getattr(self, f"context_param-b_{lang_pair_idx}") or None
+        self.r_i = getattr(self, f"context_param-r_{lang_pair_idx}")
+        self.s_i = getattr(self, f"context_param-s_{lang_pair_idx}")
+        self.b_i = getattr(self, f"context_param-b_{lang_pair_idx}")
         assert self.r_i is not None
         assert self.s_i is not None
         assert self.b_i is not None
