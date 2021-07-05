@@ -138,8 +138,12 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
     # Resets the shared context parameters, which thankfully is just zeroing
     # out the Tensors, except that it needs to be detached from the
     # computational graph ... which means a new Tensor ...
-    def _reset_context_parameters(self, root_model):
-        for path in self.context_parameters:
+    def _reset_context_parameters(self, root_model, lang_pair_idx):
+        filtered_context_parameters, _ = self._get_context_parameters(
+            root_model, lang_pair_idx
+        )
+
+        for path in filtered_context_parameters:
             ref = _get_module_by_path(root_model, path)
             _set_module_by_path(
                 root_model, path,
@@ -170,7 +174,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         # Reset context parameters on every new task, or in this case
         # language pair
-        self._reset_context_parameters(model)
+        self._reset_context_parameters(model, lang_pair_idx)
 
         for _ in range(self.args.cavia_inner_updates):
             # Fetch the current references to the Tensors used
@@ -222,7 +226,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             self.meta_gradient[param_n] += task_gradients[i].detach()
 
         # Flush context parameters just in case
-        self._reset_context_parameters(model)
+        self._reset_context_parameters(model, lang_pair_idx)
         return loss, sample_size, logging_output
 
     def train_step(
@@ -265,7 +269,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         # Reset context parameters on every new task, or in this case
         # language pair
-        self._reset_context_parameters(model)
+        self._reset_context_parameters(model, lang_pair_idx)
 
         for _ in range(self.args.cavia_inner_updates):
             # Fetch the current references to the Tensors used
