@@ -128,19 +128,19 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         # Reset context parameters on every new task
         model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
 
-        # Calculate loss with current parameters
-        loss, sample_size, logging_output = run_model()
-
         context_n, context_p = self._get_context_parameters(
             lang_pair_idx, model.models[lang_pair]
         )
 
         for _ in range(self.args.cavia_inner_updates):
+            # Calculate loss with current parameters
+            loss, _, __ = run_model()
+
             # Compute task_gradients with respect to context parameters
             task_gradients = torch.autograd.grad(
                 loss,
                 context_p,
-                create_graph=not self.args.cavia_first_order
+                create_graph=not self.args.cavia_first_order,
             )
 
             # Gradient Descent on context parameters
@@ -154,8 +154,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
                     context_p[i] - self.context_lr * task_gradients[i]
                 )
 
-            # Recompute loss after context parameter update
-            loss, sample_size, logging_output = run_model()
+        # Recompute loss after context parameter update
+        loss, sample_size, logging_output = run_model()
 
         # Filter out Tensors that don't need gradients for lifelong learning
         shared_parameters = {
@@ -219,21 +219,21 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         # to be saved as part of the model for independent evaluation.
         model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
 
-        # Calculate loss with current parameters
-        loss, sample_size, logging_output = criterion(
-            model.models[lang_pair], sample[lang_pair]
-        )
-
         context_n, context_p = self._get_context_parameters(
             lang_pair_idx, model.models[lang_pair]
         )
 
         for _ in range(self.args.cavia_inner_updates):
+            # Calculate loss with current parameters
+            loss, _, __ = criterion(
+                model.models[lang_pair], sample[lang_pair]
+            )
+
             # Compute task_gradients with respect to context parameters
             task_gradients = torch.autograd.grad(
                 loss,
                 context_p,
-                create_graph=not self.args.cavia_first_order
+                create_graph=not self.args.cavia_first_order,
             )
 
             # Gradient Descent on context parameters
@@ -250,12 +250,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
                     context_p[i] - self.context_lr * gradient
                 )
 
-            # Recompute loss after context parameter update
-            loss, sample_size, logging_output = criterion(
-                model.models[lang_pair], sample[lang_pair]
-            )
-
-        return loss, sample_size, logging_output
+        # Recompute loss after context parameter update
+        return criterion(model.models[lang_pair], sample[lang_pair])
 
     def inference_step(
         self, generator, models, sample, prefix_tokens=None, constraints=None
