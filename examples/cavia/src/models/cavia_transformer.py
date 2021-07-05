@@ -57,6 +57,7 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
     ):
         super().__init__(args, no_encoder_attn, add_bias_kv, add_zero_attn)
 
+        self.args = args
         self.lang_pair_idx = None
 
         # The number of tasks is the number of language pairs
@@ -103,8 +104,7 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         ]
 
         for i in range(self.n_tasks):
-            # Register as buffers so that parameters are saved but not included
-            # into the parameters() iterator
+            # Register parameters
             self.register_parameter(f"context_param-r_{i}", self.r_i[i])
             self.register_parameter(f"context_param-s_{i}", self.s_i[i])
             self.register_parameter(f"context_param-b_{i}", self.b_i[i])
@@ -122,15 +122,29 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         )
 
     def reset_context_parameters(self, lang_pair_idx):
-        # Zero out tensors, don't calculate gradients with this operation
-        with torch.no_grad():
-            self.r_i[lang_pair_idx] *= 0
-            self.s_i[lang_pair_idx] *= 0
-            self.b_i[lang_pair_idx] *= 0
-        # Reset gradient
-        self.r_i[lang_pair_idx].grad = None
-        self.s_i[lang_pair_idx].grad = None
-        self.b_i[lang_pair_idx].grad = None
+        self.r_i[lang_pair_idx] = nn.Parameter(torch.zeros(
+            self.args.decoder_ffn_embed_dim, 1,
+            dtype=torch.float16 if self.args.fp16 else torch.float32,
+            device='cuda' if torch.cuda.is_available() else 'cpu',
+        ))
+        self.s_i[lang_pair_idx] = nn.Parameter(torch.zeros(
+            self.embed_dim, 1,
+            dtype=torch.float16 if self.args.fp16 else torch.float32,
+            device='cuda' if torch.cuda.is_available() else 'cpu',
+        ))
+        self.b_i[lang_pair_idx] = nn.Parameter(torch.zeros(
+            self.args.decoder_ffn_embed_dim,
+            dtype=torch.float16 if self.args.fp16 else torch.float32,
+            device='cuda' if torch.cuda.is_available() else 'cpu',
+        ))
+
+        self.register_parameter(f"context_param-r_{lang_pair_idx}", self.r_i[lang_pair_idx])
+        self.register_parameter(f"context_param-s_{lang_pair_idx}", self.s_i[lang_pair_idx])
+        self.register_parameter(f"context_param-b_{lang_pair_idx}", self.b_i[lang_pair_idx])
+        # Ensure BatchEnsemble parameters can calculate their gradients
+        self.r_i[lang_pair_idx].requires_grad = True
+        self.s_i[lang_pair_idx].requires_grad = True
+        self.b_i[lang_pair_idx].requires_grad = True
 
     def _update_context_param(self, param_type, param_idx, value):
         context_params = (
