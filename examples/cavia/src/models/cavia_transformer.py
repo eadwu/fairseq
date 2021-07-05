@@ -110,7 +110,7 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         # Set gradient on shared weights based on lifelong learning
         self.fc1.requires_grad_(
             self.batch_ensemble_root == -1 or
-            self.lang_pair_idx == self.batch_ensemble_root
+            lang_pair_idx == self.batch_ensemble_root
         )
 
     def forward(
