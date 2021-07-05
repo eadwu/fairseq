@@ -220,10 +220,12 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         self._reset_named_parameters(model, context_n)
 
         for _ in range(self.args.cavia_inner_updates):
-            # Calculate loss with current parameters
-            loss, _, __ = criterion(
-                model.models[lang_pair], sample[lang_pair]
-            )
+            # Gradients aren't enabled during validation...
+            with torch.enable_grad():
+                # Calculate loss with current parameters
+                loss, _, __ = criterion(
+                    model.models[lang_pair], sample[lang_pair]
+                )
 
             # Compute task_gradients with respect to context parameters
             task_gradients = torch.autograd.grad(
