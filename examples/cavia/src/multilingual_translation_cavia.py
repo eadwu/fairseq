@@ -99,7 +99,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             prev_value = getattr(decoder_layer, context_param)
             setattr(
                 decoder_layer, context_param,
-                nn.Parameters(torch.zeros_like(prev_value))
+                nn.Parameter(torch.zeros_like(prev_value))
             )
 
     def _per_lang_pair_train_loss(
