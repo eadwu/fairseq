@@ -176,6 +176,10 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         # language pair
         self._reset_context_parameters(model, lang_pair_idx)
 
+        # Update learning rate relative to optimizer's learning rate,
+        # especially if a learning rate scheduler is involved
+        self.context_lr = optimizer.get_lr() * self.args.cavia_lr_inner_multiplier
+
         for _ in range(self.args.cavia_inner_updates):
             # Fetch the current references to the Tensors used
             context_names, context_params = self._get_context_parameters(
