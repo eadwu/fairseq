@@ -49,7 +49,6 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         super().__init__(args, no_encoder_attn, add_bias_kv, add_zero_attn)
 
         self.args = args
-        self.lang_pair_idx = None
 
         # The number of tasks is the number of language pairs
         self.lang_pairs = args.lang_pairs
@@ -62,50 +61,52 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         assert not hasattr(self.fc1, "bias")
 
         # BatchEnsemble lifelong learning
-        ## Which task should update the shared parameters
+        ## Which task (language pair) should update the shared parameters
         self.batch_ensemble_root = getattr(args, "batch_ensemble_root", -1)
 
-        # Initialize context parameters, BatchEnsemble r_i, s_i, and b_i
-        # r_i is the column vector
-        self.r_i = [
-            nn.Parameter(torch.zeros(
-                args.decoder_ffn_embed_dim, 1,
-                dtype=torch.float16 if args.fp16 else torch.float32,
-                device='cuda' if torch.cuda.is_available() else 'cpu',
-            ))
-            for _ in range(self.n_tasks)
-        ]
-        # s_i is the row vector
-        self.s_i = [
-            nn.Parameter(torch.zeros(
-                self.embed_dim, 1,
-                dtype=torch.float16 if args.fp16 else torch.float32,
-                device='cuda' if torch.cuda.is_available() else 'cpu',
-            ))
-            for _ in range(self.n_tasks)
-        ]
-        # b_i is the bias vectors
-        self.b_i = [
-            nn.Parameter(torch.zeros(
-                args.decoder_ffn_embed_dim,
-                dtype=torch.float16 if args.fp16 else torch.float32,
-                device='cuda' if torch.cuda.is_available() else 'cpu',
-            ))
-            for _ in range(self.n_tasks)
-        ]
+        # BatchEnsemble r_i, s_i, and b_i
+        self.r_i = None
+        self.s_i = None
+        self.b_i = None
 
         for i in range(self.n_tasks):
-            # Register parameters
-            self.register_parameter(f"context_param-r_{i}", self.r_i[i])
-            self.register_parameter(f"context_param-s_{i}", self.s_i[i])
-            self.register_parameter(f"context_param-b_{i}", self.b_i[i])
-            # Ensure BatchEnsemble parameters can calculate their gradients
-            self.r_i[i].requires_grad = True
-            self.s_i[i].requires_grad = True
-            self.b_i[i].requires_grad = True
+            # Initialize context parameters (BatchEnsemble) for CAVIA
+            # Due to the manual gradient and Tensor processing steps, these
+            # should only _ever_ be indexed through their registered parameter
+            # names.
+            self.register_parameter(
+                f"context_param-r_{i}",
+                nn.Parameter(torch.zeros(
+                    args.decoder_ffn_embed_dim, 1,
+                    dtype=torch.float16 if args.fp16 else torch.float32,
+                    device='cuda' if torch.cuda.is_available() else 'cpu',
+                ), requires_grad=True),
+            )
+            self.register_parameter(
+                f"context_param-s_{i}",
+                nn.Parameter(torch.zeros(
+                    self.embed_dim, 1,
+                    dtype=torch.float16 if args.fp16 else torch.float32,
+                    device='cuda' if torch.cuda.is_available() else 'cpu',
+                ), requires_grad=True),
+            )
+            self.register_parameter(
+                f"context_param-b_{i}",
+                nn.Parameter(torch.zeros(
+                    args.decoder_ffn_embed_dim,
+                    dtype=torch.float16 if args.fp16 else torch.float32,
+                    device='cuda' if torch.cuda.is_available() else 'cpu',
+                ), requires_grad=True),
+            )
 
     def set_lang_pair_idx(self, lang_pair_idx):
-        self.lang_pair_idx = lang_pair_idx
+        # Update BatchEnsemble references
+        self.r_i = getattr(self, f"context_param-r_{lang_pair_idx}") or None
+        self.s_i = getattr(self, f"context_param-s_{lang_pair_idx}") or None
+        self.b_i = getattr(self, f"context_param-b_{lang_pair_idx}") or None
+        assert self.r_i is not None
+        assert self.s_i is not None
+        assert self.b_i is not None
         # Set gradient on shared weights based on lifelong learning
         self.fc1.requires_grad_(
             self.batch_ensemble_root == -1 or
@@ -227,13 +228,10 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
             x = self.final_layer_norm(x)
 
         # Independent r_i, s_i, and b_i for each language pair
-        r_i = self.r_i[self.lang_pair_idx]
-        s_i = self.s_i[self.lang_pair_idx]
-        b_i = self.b_i[self.lang_pair_idx]
-        w_i = r_i @ s_i.T
+        w_i = self.r_i @ self.s_i.T
         W = self.fc1.weight * w_i
         x = x @ W.T
-        x = x + b_i
+        x = x + self.b_i
 
         x = self.activation_fn(x)
         x = self.activation_dropout_module(x)
