@@ -150,7 +150,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
                 setattr(
                     decoder_layer, context_param,
-                    context_p[i] - self.context_lr * task_gradients[i]
+                    nn.Parameter(context_p[i] - self.context_lr * task_gradients[i])
                 )
 
         # Recompute loss after context parameter update
@@ -243,7 +243,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
                     gradient = gradient.detach()
                 setattr(
                     decoder_layer, context_param,
-                    context_p[i] - self.context_lr * gradient
+                    nn.Parameter(context_p[i] - self.context_lr * gradient)
                 )
 
         # Recompute loss after context parameter update
