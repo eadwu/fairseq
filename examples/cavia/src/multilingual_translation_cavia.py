@@ -111,11 +111,19 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             param_subset[1:] for param_subset in shared_params
         ]
 
-    # Fetches the Tensor references for the context parameters
-    def _get_context_parameters(self, root_model):
-        return [
-            _get_module_by_path(root_model, path)
+    # Fetches the relevant Tensor references for the context parameters
+    def _get_context_parameters(self, root_model, lang_pair_idx):
+        filtered_context_parameters = [
+            path
             for path in self.context_parameters
+            if f"r_{lang_pair_idx}" in path or
+                f"s_{lang_pair_idx}" in path or
+                f"b_{lang_pair_idx}" in path
+        ]
+
+        return filtered_context_parameters, [
+            _get_module_by_path(root_model, path)
+            for path in filtered_context_parameters
         ]
 
     # Resyncs the shared context parameters, or otherwise said, the Tensor
@@ -166,7 +174,9 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         for _ in range(self.args.cavia_inner_updates):
             # Fetch the current references to the Tensors used
-            context_parameters = self._get_context_parameters(model)
+            context_names, context_params = self._get_context_parameters(
+                model, lang_pair_idx
+            )
 
             # Calculate loss with current parameters
             loss, _, __ = run_model()
@@ -174,17 +184,17 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             # Compute task_gradients with respect to context parameters
             task_gradients = torch.autograd.grad(
                 loss,
-                context_parameters,
+                context_params,
                 create_graph=not self.args.cavia_first_order,
             )
 
             # Gradient Descent on context parameters
             for i, _ in enumerate(task_gradients):
-                context_parameter_name = self.context_parameters[i]
+                context_parameter_name = context_names[i]
                 _set_module_by_path(
                     model, context_parameter_name,
                     nn.Parameter(
-                        context_parameters[i] - self.context_lr * task_gradients[i]
+                        context_params[i] - self.context_lr * task_gradients[i]
                     ),
                 )
 
@@ -259,7 +269,9 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         for _ in range(self.args.cavia_inner_updates):
             # Fetch the current references to the Tensors used
-            context_parameters = self._get_context_parameters(model)
+            context_names, context_params = self._get_context_parameters(
+                model, lang_pair_idx
+            )
 
             # Gradients aren't enabled during validation ...
             with torch.enable_grad():
@@ -271,13 +283,13 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             # Compute task_gradients with respect to context parameters
             task_gradients = torch.autograd.grad(
                 loss,
-                context_parameters,
+                context_params,
                 create_graph=not self.args.cavia_first_order,
             )
 
             # Gradient Descent on context parameters
             for i, _ in enumerate(task_gradients):
-                context_parameter_name = self.context_parameters[i]
+                context_parameter_name = context_names[i]
 
                 gradient = task_gradients[i]
                 if self.args.cavia_first_order: # break from computational graph
@@ -286,7 +298,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
                 _set_module_by_path(
                     model, context_parameter_name,
                     nn.Parameter(
-                        context_parameters[i] - self.context_lr * gradient
+                        context_params[i] - self.context_lr * gradient
                     )
                 )
 
