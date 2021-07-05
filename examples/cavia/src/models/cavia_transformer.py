@@ -35,10 +35,6 @@ class CAVIATransformerDecoder(TransformerDecoder):
             args, no_encoder_attn=no_encoder_attn
         )
 
-    def reset_context_parameters(self, lang_pair_idx):
-        for layer in self.layers:
-            layer.reset_context_parameters(lang_pair_idx)
-
 
 class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
     """Decoder layer with BatchEnsemble weights
@@ -115,31 +111,6 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
             self.batch_ensemble_root == -1 or
             self.lang_pair_idx == self.batch_ensemble_root
         )
-
-    def reset_context_parameters(self, lang_pair_idx):
-        self.r_i[lang_pair_idx] = nn.Parameter(torch.zeros(
-            self.args.decoder_ffn_embed_dim, 1,
-            dtype=torch.float16 if self.args.fp16 else torch.float32,
-            device='cuda' if torch.cuda.is_available() else 'cpu',
-        ))
-        self.s_i[lang_pair_idx] = nn.Parameter(torch.zeros(
-            self.embed_dim, 1,
-            dtype=torch.float16 if self.args.fp16 else torch.float32,
-            device='cuda' if torch.cuda.is_available() else 'cpu',
-        ))
-        self.b_i[lang_pair_idx] = nn.Parameter(torch.zeros(
-            self.args.decoder_ffn_embed_dim,
-            dtype=torch.float16 if self.args.fp16 else torch.float32,
-            device='cuda' if torch.cuda.is_available() else 'cpu',
-        ))
-
-        self.register_parameter(f"context_param-r_{lang_pair_idx}", self.r_i[lang_pair_idx])
-        self.register_parameter(f"context_param-s_{lang_pair_idx}", self.s_i[lang_pair_idx])
-        self.register_parameter(f"context_param-b_{lang_pair_idx}", self.b_i[lang_pair_idx])
-        # Ensure BatchEnsemble parameters can calculate their gradients
-        self.r_i[lang_pair_idx].requires_grad = True
-        self.s_i[lang_pair_idx].requires_grad = True
-        self.b_i[lang_pair_idx].requires_grad = True
 
     def forward(
         self,

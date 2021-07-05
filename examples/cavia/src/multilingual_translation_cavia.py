@@ -1,7 +1,9 @@
 from fairseq.logging.metrics import state_dict
-import torch
 from fairseq.tasks import register_task
 from fairseq.tasks.multilingual_translation import MultilingualTranslationTask
+
+import torch
+import torch.nn as nn
 
 from .models.cavia_transformer import CAVIATransformerDecoder
 
@@ -88,6 +90,18 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             module = getattr(module, name)
         return module, path[-1]
 
+    def _reset_named_parameters(self, model, named_parameters):
+        for name in named_parameters:
+            decoder_layer, context_param = self._walk_module_path(
+                model, name
+            )
+
+            prev_value = getattr(decoder_layer, context_param)
+            setattr(
+                decoder_layer, context_param,
+                nn.Parameters(torch.zeros_like(prev_value))
+            )
+
     def _per_lang_pair_train_loss(
         self, lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
     ):
@@ -110,12 +124,12 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
 
-        # Reset context parameters on every new task
-        model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
-
         context_n, context_p = self._get_context_parameters(
             lang_pair_idx, model.models[lang_pair]
         )
+
+        # Reset context parameters on every new task
+        self._reset_named_parameters(model, context_n)
 
         for _ in range(self.args.cavia_inner_updates):
             # Calculate loss with current parameters
@@ -160,7 +174,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             self.meta_gradient[param_n] += task_gradients[i].detach()
 
         # Flush context parameters just in case
-        model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
+        self._reset_named_parameters(model, context_n)
         return loss, sample_size, logging_output
 
     def train_step(
@@ -198,15 +212,12 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
 
-        # Since context parameters are only reset in the beginning and the
-        # model was implemented in such a way that context parameters are
-        # independent from one another, this allows for the context parameters
-        # to be saved as part of the model for independent evaluation.
-        model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
-
         context_n, context_p = self._get_context_parameters(
             lang_pair_idx, model.models[lang_pair]
         )
+
+        # Reset context parameters on every new task
+        self._reset_named_parameters(model, context_n)
 
         for _ in range(self.args.cavia_inner_updates):
             # Calculate loss with current parameters
