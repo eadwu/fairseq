@@ -84,6 +84,16 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             model.models[lang_pair].decoder, CAVIATransformerDecoder
         )
 
+        def run_model():
+            loss, sample_size, logging_output = criterion(
+                model.models[lang_pair], sample[lang_pair]
+            )
+
+            if ignore_grad:
+                loss *= 0
+
+            return loss, sample_size, logging_output
+
         # Update language pair index
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
@@ -92,12 +102,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         model.models[lang_pair].decoder.reset_context_parameters(lang_pair_idx)
 
         # Calculate loss with current parameters
-        loss, sample_size, logging_output = criterion(
-            model.models[lang_pair], sample[lang_pair]
-        )
-
-        if ignore_grad:
-            loss *= 0
+        loss, sample_size, logging_output = run_model()
 
         context_parameters = self._get_context_parameters(
             lang_pair_idx, model.models[lang_pair]
@@ -120,12 +125,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
                 context_parameters[i] = context_parameters[i] - gradient
 
             # Recompute loss after context parameter update
-            loss, sample_size, logging_output = criterion(
-                model.models[lang_pair], sample[lang_pair]
-            )
-
-            if ignore_grad:
-                loss *= 0
+            loss, sample_size, logging_output = run_model()
 
         # Filter out Tensors that don't need gradients for lifelong learning
         shared_parameters = {
