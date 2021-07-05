@@ -118,11 +118,10 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
             # Gradient Descent on context parameters
             for i, _ in enumerate(task_gradients):
-                gradient = task_gradients[i]
-                if self.args.cavia_first_order:
-                    gradient = gradient.detach()
-                gradient = self.context_lr * gradient
-                context_parameters[i] = context_parameters[i] - gradient
+                with torch.no_grad():
+                    context_parameters[i].sub_(
+                        task_gradients[i], alpha=self.context_lr
+                    )
 
             # Recompute loss after context parameter update
             loss, sample_size, logging_output = run_model()
@@ -211,8 +210,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
                 gradient = task_gradients[i]
                 if self.args.cavia_first_order:
                     gradient = gradient.detach()
-                gradient = self.context_lr * gradient
-                context_parameters[i] = context_parameters[i] - gradient
+                with torch.no_grad():
+                    context_parameters[i].sub_(gradient, alpha=self.context_lr)
 
             # Recompute loss after context parameter update
             loss, sample_size, logging_output = criterion(
