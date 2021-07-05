@@ -1,9 +1,8 @@
 from fairseq.models import register_model, register_model_architecture
-from fairseq.models.multilingual_transformer import MultilingualTransformerModel
-from fairseq.models.transformer import (
-    TransformerEncoder,
-    base_architecture,
+from fairseq.models.multilingual_transformer import (
+    MultilingualTransformerModel, multilingual_transformer_iwslt_de_en
 )
+from fairseq.models.transformer import TransformerEncoder
 
 from .cavia_transformer import CAVIATransformerDecoder
 
@@ -29,19 +28,20 @@ class CAVIAMultilingualTransformer(MultilingualTransformerModel):
     "cavia_multilingual_transformer", "cavia_multilingual_transformer"
 )
 def cavia_multilingual_architecture(args):
-    args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 512)
-    args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 1024)
-    args.encoder_attention_heads = getattr(args, "encoder_attention_heads", 4)
-    # multilingual_transformer_iwslt_de_en = 6
-    args.encoder_layers = getattr(args, "encoder_layers", 12)
-    args.decoder_embed_dim = getattr(args, "decoder_embed_dim", 512)
-    args.decoder_ffn_embed_dim = getattr(args, "decoder_ffn_embed_dim", 1024)
-    args.decoder_attention_heads = getattr(args, "decoder_attention_heads", 4)
-    # multilingual_transformer_iwslt_de_en = 6
-    args.decoder_layers = getattr(args, "decoder_layers", 24)
+    multilingual_transformer_iwslt_de_en(args)
+
     args.share_encoders = getattr(args, "share_encoders", True)
     args.share_decoders = getattr(args, "share_decoders", True)
     args.share_encoder_embeddings = getattr(args, "share_encoder_embeddings", True)
     args.share_decoder_embeddings = getattr(args, "share_decoder_embeddings", True)
 
-    base_architecture(args)
+
+@register_model_architecture(
+    "cavia_multilingual_transformer", "cavia_phat_multilingual_transformer"
+)
+def cavia_phat_multilingual_architecture(args):
+    cavia_multilingual_architecture(args)
+
+    # Latent Depth number of layers
+    args.encoder_layers = getattr(args, "encoder_layers", 12)
+    args.decoder_layers = getattr(args, "decoder_layers", 24)
