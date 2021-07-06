@@ -56,10 +56,6 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
             self.lang_pairs = self.lang_pairs.split(",")
         self.n_tasks = len(self.lang_pairs)
 
-        # Ol' sadness is much greatly appreciated, bias isn't used anyway
-        delattr(self.fc1, "bias")
-        assert not hasattr(self.fc1, "bias")
-
         # BatchEnsemble lifelong learning
         ## Which task (language pair) should update the shared parameters
         self.batch_ensemble_root = getattr(args, "batch_ensemble_root", -1)
@@ -88,14 +84,15 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
                     device='cuda' if torch.cuda.is_available() else 'cpu',
                 ), requires_grad=True),
             )
-            self.register_parameter(
-                f"context_param-b_{i}",
-                nn.Parameter(torch.zeros(
-                    args.decoder_ffn_embed_dim,
-                    dtype=torch.float16 if args.fp16 else torch.float32,
-                    device='cuda' if torch.cuda.is_available() else 'cpu',
-                ), requires_grad=True),
-            )
+            if hasattr(self.fc1, "bias"):
+                self.register_parameter(
+                    f"context_param-b_{i}",
+                    nn.Parameter(torch.zeros(
+                        args.decoder_ffn_embed_dim,
+                        dtype=torch.float16 if args.fp16 else torch.float32,
+                        device='cuda' if torch.cuda.is_available() else 'cpu',
+                    ), requires_grad=True),
+                )
 
     def set_lang_pair_idx(self, lang_pair_idx):
         self.lang_pair_idx = lang_pair_idx
@@ -222,12 +219,14 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         # Independent r_i, s_i, and b_i for each language pair
         r_i = getattr(self, f"context_param-r_{self.lang_pair_idx}")
         s_i = getattr(self, f"context_param-s_{self.lang_pair_idx}")
-        b_i = getattr(self, f"context_param-b_{self.lang_pair_idx}")
 
         w_i = r_i @ s_i.T
-        W = self.fc1.weight * w_i
+        W = getattr(self.fc1, "weight") * w_i
         x = x @ W.T
-        x = x + b_i
+        if hasattr(self.fc1, "bias"):
+            b_i = getattr(self, f"context_param-b_{self.lang_pair_idx}")
+            b = getattr(self.fc1, "bias") * b_i
+            x = x + b
 
         x = self.activation_fn(x)
         x = self.activation_dropout_module(x)
