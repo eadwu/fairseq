@@ -35,25 +35,26 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
     def __init__(self, args, dicts, training):
         super().__init__(args, dicts, training)
 
-        # Needed to satisfy an assumption for shared gradient accumulation
-        assert self.args.share_encoders
-        # Needed for shared r_i, s_i, and b_i, through shared TransformerDecoder(s)
-        assert self.args.share_decoders
-
         self.lang_pairs = args.lang_pairs
         self.eval_lang_pairs = self.lang_pairs
         self.model_lang_pairs = self.lang_pairs
         assert len(self.lang_pairs) > 0
         self.n_tasks = float(len(self.lang_pairs))
 
-        # Validate argument batch_ensemble_root
-        assert args.batch_ensemble_root == -1 or (
-            args.batch_ensemble_root >= 0 and
-            args.batch_ensemble_root < len(self.lang_pairs)
-        )
+        if training:
+            # Needed to satisfy an assumption for shared gradient accumulation
+            assert self.args.share_encoders
+            # Needed for shared r_i, s_i, and b_i, through shared TransformerDecoder(s)
+            assert self.args.share_decoders
 
-        # Learning rate for context parameters
-        self.context_lr = self.args.lr[0] * self.args.cavia_lr_inner_multiplier
+            # Validate argument batch_ensemble_root
+            assert args.batch_ensemble_root == -1 or (
+                args.batch_ensemble_root >= 0 and
+                args.batch_ensemble_root < len(self.lang_pairs)
+            )
+
+            # Learning rate for context parameters
+            self.context_lr = self.args.lr[0] * self.args.cavia_lr_inner_multiplier
 
         # Hack for tracking in between functions without copying a bunch more code
         self.meta_gradient = None
