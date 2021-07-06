@@ -328,7 +328,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
     def inference_step(
         self, generator, models, sample, prefix_tokens=None, constraints=None
     ):
-        lang_pair = f"{self.args.source_lang}-${self.args.target_lang}"
+        lang_pair = f"{self.args.source_lang}-{self.args.target_lang}"
 
         # Update language pair index
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
@@ -342,7 +342,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         # No context parameter changes, used those saved within the model
         # to perform evaluation
-
-        super().inference_step(
+        return super().inference_step(
             generator, models, sample, prefix_tokens, constraints
         )
