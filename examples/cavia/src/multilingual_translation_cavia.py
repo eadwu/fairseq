@@ -56,6 +56,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         # Hack for tracking in between functions without copying a bunch more code
         self.meta_gradient = None
+        self.shared_parameters = None
         self.context_parameters = None
         self.shared_context_parameters = None
 
@@ -70,24 +71,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         assert len(lang_pair_idx) == 1
         lang_pair_idx = lang_pair_idx[0]
         return lang_pair_idx
-
-    # Fetch non-context parameters in model
-    def _fetch_shared_parameters(self, root_model, lang_pair=None):
-        model_names = [
-            name
-            for name, _ in root_model.named_parameters()
-            if "context_param" not in name and (
-                # no model-specific filtering
-                lang_pair is not None or
-                # model-specific parameters
-                f"models.{lang_pair}" in name
-            )
-        ]
-
-        return model_names, [
-            _get_module_by_path(root_model, path)
-            for path in model_names
-        ]
 
     # This is confusing, anyway the main rationale for reimplementing this here
     # is because I'm not entirely sure on how shared parameters work.  From
@@ -227,15 +210,19 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         loss, sample_size, logging_output = run_model()
 
         # Filter out Tensors that don't need gradients for lifelong learning
-        model_names, model_tensors = self._fetch_shared_parameters(
-            model, lang_pair=lang_pair
-        )
+        shared_parameters = {
+            name: param
+            for name, param in self.shared_parameters.items()
+            if param.requires_grad and f"models.{lang_pair}" in name
+        }
+        shared_parameters_n = [name for name in shared_parameters.keys()]
+        shared_parameters_p = [shared_parameters[n] for n in shared_parameters_n]
 
         # Compute task_gradients with respect to the shared [model] parameters
-        task_gradients = torch.autograd.grad(loss, model_tensors)
+        task_gradients = torch.autograd.grad(loss, shared_parameters_p)
 
         # Update meta-gradient
-        for param_name, gradient in zip(model_names, task_gradients):
+        for param_name, gradient in zip(shared_parameters_n, task_gradients):
             self.meta_gradient[param_name] += gradient.detach()
 
         # Flush context parameters just in case
@@ -245,8 +232,13 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
     def train_step(
         self, sample, model, criterion, optimizer, update_num, ignore_grad=False
     ):
-        shared_names, shared_params = self._fetch_shared_parameters(model)
-        self.meta_gradient = {name: 0 for name in shared_names}
+        self.shared_parameters = {
+            name: parameters
+            for name, parameters in model.named_parameters()
+            if "context_param" not in name
+        }
+
+        self.meta_gradient = {name: 0 for name in self.shared_parameters}
 
         # Populate Task with context parameter information
         self._fetch_context_parameters(model)
@@ -257,8 +249,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         # Synchronize meta-gradient to shared parameters
         optimizer.zero_grad()
-        for name, param in zip(shared_names, shared_params):
-            param.grad += self.meta_gradient[name] / self.n_tasks
+        for name, param in self.shared_parameters.items():
+            param.grad = self.meta_gradient[name] / self.n_tasks
             param.grad.data.clamp_(-10, 10)
         optimizer.step()
 
