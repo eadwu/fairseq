@@ -72,11 +72,16 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         return lang_pair_idx
 
     # Fetch non-context parameters in model
-    def _fetch_shared_parameters(self, model, root_model):
+    def _fetch_shared_parameters(self, root_model, lang_pair=None):
         model_names = [
             name
-            for name, _ in model.named_parameters()
-            if "context_param" not in name
+            for name, _ in root_model.named_parameters()
+            if "context_param" not in name and (
+                # no model-specific filtering
+                lang_pair is not None or
+                # model-specific parameters
+                f"models.{lang_pair}" in name
+            )
         ]
 
         return model_names, [
@@ -223,7 +228,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         # Filter out Tensors that don't need gradients for lifelong learning
         model_names, model_tensors = self._fetch_shared_parameters(
-            model.models[lang_pair], model
+            model, lang_pair=lang_pair
         )
 
         # Compute task_gradients with respect to the shared [model] parameters
@@ -240,7 +245,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
     def train_step(
         self, sample, model, criterion, optimizer, update_num, ignore_grad=False
     ):
-        shared_names, shared_params = self._fetch_shared_parameters(model, model)
+        shared_names, shared_params = self._fetch_shared_parameters(model)
         self.meta_gradient = {name: 0 for name in shared_names}
 
         # Populate Task with context parameter information
