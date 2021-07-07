@@ -25,11 +25,11 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
                             help='Batch Ensemble root task (0-based) for lifelong learning')
         # args for Meta-Training with CAVIA
         parser.add_argument('--cavia-inner-updates', type=int, default=1,
-                            help='Number of inner-loop updates')
-        parser.add_argument('--cavia-lr-inner-multiplier', type=float, default=1.0,
-                            help='Inner-loop learning rate multiplier (relative to global)')
+                            help='Number of inner-loop updates (during training)')
+        parser.add_argument('--cavia-lr-inner', type=float, default=1.0,
+                            help='Inner-loop learning rate (task-specific)')
         parser.add_argument('--cavia-first-order', default=False, action='store_true',
-                            help='Run first-order version of CAVIA')
+                            help='Run first-order approximation version')
         # fmt: on
 
     def __init__(self, args, dicts, training):
@@ -54,7 +54,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             )
 
             # Learning rate for context parameters
-            self.context_lr = self.args.lr[0] * self.args.cavia_lr_inner_multiplier
+            self.context_lr = self.args.cavia_lr_inner
 
         # Hack for tracking in between functions without copying a bunch more code
         self.meta_gradient = None
@@ -178,10 +178,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         # Reset context parameters on every new task, or in this case
         # language pair
         self._reset_context_parameters(model, lang_pair_idx)
-
-        # Update learning rate relative to optimizer's learning rate,
-        # especially if a learning rate scheduler is involved
-        self.context_lr = optimizer.get_lr() * self.args.cavia_lr_inner_multiplier
 
         for _ in range(self.args.cavia_inner_updates):
             # Fetch the current references to the Tensors used
