@@ -30,11 +30,6 @@ class CAVIAMultilingualTransformer(MultilingualTransformerModel):
 def cavia_multilingual_architecture(args):
     multilingual_transformer_iwslt_de_en(args)
 
-    args.share_encoders = True
-    args.share_decoders = True
-    args.share_encoder_embeddings = True
-    args.share_decoder_embeddings = True
-
 
 @register_model_architecture(
     "cavia_multilingual_transformer", "cavia_phat_multilingual_transformer"
