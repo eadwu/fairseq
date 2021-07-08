@@ -183,19 +183,16 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
             # Compute task_gradients with respect to context parameters
             task_gradients = torch.autograd.grad(
-                loss,
-                context_params,
+                loss, context_params,
                 create_graph=not self.args.cavia_first_order,
             )
 
             # Gradient Descent on context parameters
-            for i, _ in enumerate(task_gradients):
-                context_parameter_name = context_names[i]
+            merged = zip(context_names, context_params, task_gradients)
+            for param_name, param, gradient in merged:
                 _set_module_by_path(
-                    model, context_parameter_name,
-                    nn.Parameter(
-                        context_params[i] - self.context_lr * task_gradients[i]
-                    ),
+                    model, param_name,
+                    nn.Parameter(param - self.context_lr * gradient),
                 )
 
             # Synchronize updates across shared context parameters
@@ -215,14 +212,14 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             for name, param in self.shared_parameters.items()
             if param.requires_grad and f"models.{lang_pair}" in name
         }
-        shared_parameters_n = [name for name in shared_parameters.keys()]
-        shared_parameters_p = [shared_parameters[n] for n in shared_parameters_n]
+        shared_names = [name for name in shared_parameters.keys()]
+        shared_params = [shared_parameters[n] for n in shared_names]
 
         # Compute task_gradients with respect to the shared [model] parameters
-        task_gradients = torch.autograd.grad(loss, shared_parameters_p)
+        task_gradients = torch.autograd.grad(loss, shared_params)
 
         # Update meta-gradient
-        for param_name, gradient in zip(shared_parameters_n, task_gradients):
+        for param_name, gradient in zip(shared_names, task_gradients):
             self.meta_gradient[param_name] += gradient.detach()
 
         # Flush context parameters just in case
@@ -290,18 +287,15 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             )
 
             # Gradient Descent on context parameters
-            for i, _ in enumerate(task_gradients):
-                context_parameter_name = context_names[i]
-
-                gradient = task_gradients[i]
-                if self.args.cavia_first_order: # break from computational graph
+            merged = zip(context_names, context_params, task_gradients)
+            for param_name, param, gradient in merged:
+                # Break from computational graph
+                if self.args.cavia_first_order:
                     gradient = gradient.detach()
 
                 _set_module_by_path(
-                    model, context_parameter_name,
-                    nn.Parameter(
-                        context_params[i] - self.context_lr * gradient
-                    )
+                    model, param_name,
+                    nn.Parameter(param - self.context_lr * gradient)
                 )
 
             # Synchronize updates across shared context parameters
