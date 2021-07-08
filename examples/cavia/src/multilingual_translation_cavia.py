@@ -159,16 +159,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             model.models[lang_pair].decoder, CAVIATransformerDecoder
         )
 
-        def run_model():
-            loss, sample_size, logging_output = criterion(
-                model.models[lang_pair], sample[lang_pair]
-            )
-
-            if ignore_grad:
-                loss *= 0
-
-            return loss, sample_size, logging_output
-
         # Update language pair index
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
@@ -184,7 +174,12 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             )
 
             # Calculate loss with current parameters
-            loss, _, __ = run_model()
+            loss, sample_size, logging_output = criterion(
+                model.models[lang_pair], sample[lang_pair]
+            )
+
+            if ignore_grad:
+                loss *= 0
 
             # Compute task_gradients with respect to context parameters
             task_gradients = torch.autograd.grad(
@@ -207,7 +202,12 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             self._sync_shared_context_references(model)
 
         # Recompute loss after context parameter update
-        loss, sample_size, logging_output = run_model()
+        loss, sample_size, logging_output = criterion(
+            model.models[lang_pair], sample[lang_pair]
+        )
+
+        if ignore_grad:
+            loss *= 0
 
         # Filter out Tensors that don't need gradients for lifelong learning
         shared_parameters = {
