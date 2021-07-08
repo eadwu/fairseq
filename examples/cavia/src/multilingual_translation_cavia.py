@@ -251,7 +251,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         optimizer.zero_grad()
         for name, param in self.shared_parameters.items():
             param.grad = self.meta_gradient[name] / self.n_tasks
-            param.grad.data.clamp_(-10, 10)
         optimizer.step()
 
         return agg_loss, agg_sample_size, agg_logging_output
