@@ -56,7 +56,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         # Hack for tracking in between functions without copying a bunch more code
         self.meta_gradient = None
-        self.shared_parameters = None
         self.context_parameters = None
         self.shared_context_parameters = None
 
@@ -206,21 +205,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         if ignore_grad:
             loss *= 0
 
-        # Filter out Tensors that don't need gradients for lifelong learning
-        shared_parameters = {
-            name: param
-            for name, param in self.shared_parameters.items()
-            if param.requires_grad and f"models.{lang_pair}" in name
-        }
-        shared_names = [name for name in shared_parameters.keys()]
-        shared_params = [shared_parameters[n] for n in shared_names]
-
-        # Compute task_gradients with respect to the shared [model] parameters
-        task_gradients = torch.autograd.grad(loss, shared_params)
-
-        # Update meta-gradient
-        for param_name, gradient in zip(shared_names, task_gradients):
-            self.meta_gradient[param_name] += gradient.detach()
+        # Default training scheme
+        optimizer.backward(loss)
 
         # Flush context parameters just in case
         self._reset_context_parameters(model, lang_pair_idx)
@@ -229,14 +215,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
     def train_step(
         self, sample, model, criterion, optimizer, update_num, ignore_grad=False
     ):
-        self.shared_parameters = {
-            name: parameters
-            for name, parameters in model.named_parameters()
-            if "context_param" not in name
-        }
-
-        self.meta_gradient = {name: 0 for name in self.shared_parameters}
-
         # Populate Task with context parameter information
         self._fetch_context_parameters(model)
 
@@ -244,14 +222,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             sample, model, criterion, optimizer, update_num, ignore_grad
         )
 
-        # Synchronize meta-gradient to shared parameters
-        optimizer.zero_grad()
-        for name, param in self.shared_parameters.items():
-            meta_gradient = self.meta_gradient[name] / self.n_tasks
-            if param.grad is None:
-                param.grad = meta_gradient
-            else:
-                param.grad = param.grad + meta_gradient
+        for param in model.parameters():
+            param.grad = param.grad / self.n_tasks
 
         return agg_loss, agg_sample_size, agg_logging_output
 
