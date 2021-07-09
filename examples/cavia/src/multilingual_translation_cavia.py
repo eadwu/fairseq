@@ -247,8 +247,11 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         # Synchronize meta-gradient to shared parameters
         optimizer.zero_grad()
         for name, param in self.shared_parameters.items():
-            param.grad = self.meta_gradient[name] / self.n_tasks
-        optimizer.step()
+            meta_gradient = self.meta_gradient[name] / self.n_tasks
+            if param.grad is None:
+                param.grad = meta_gradient
+            else:
+                param.grad = param.grad + meta_gradient
 
         return agg_loss, agg_sample_size, agg_logging_output
 
