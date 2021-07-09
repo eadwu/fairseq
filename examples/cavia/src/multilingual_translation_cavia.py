@@ -223,7 +223,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         )
 
         for param in model.parameters():
-            param.grad = param.grad / self.n_tasks
+            if param.grad is not None:
+                param.grad = param.grad / self.n_tasks
 
         return agg_loss, agg_sample_size, agg_logging_output
 
