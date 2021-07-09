@@ -84,23 +84,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         lang_pair_idx = lang_pair_idx[0]
         return lang_pair_idx
 
-    # This is confusing, anyway the main rationale for reimplementing this here
-    # is because I'm not entirely sure on how shared parameters work.  From
-    # what I gathered, Tensors are shared by reference, but individual
-    # references are by ???.  Shared decoders are indexed by the same reference
-    # when they are initialized but Fairseq explicitly links the shared
-    # parameters again using the module path?  So due to the confusing nature
-    # of the implemention, since for multi-order gradients the previous leaf
-    # Tensors need to be detached but also the next run need to be able to
-    # reference the updated context parameters, the implementation sticks with
-    # the module path route for all context parameters accesses and updates,
-    # thus the need for manually synchronizing shared context parameters across
-    # updates.
-
-    # This isn't a problem with the shared model parameters, since it uses an
-    # optimizer with single-order gradients, such that it is a supported
-    # "in-place" operation with PyTorch's optimizers.
-
     # Populate with the initial data needed for context parameters
     def _fetch_context_parameters(self, root_model):
         # Similar to fairseq/trainer.py, the collection of shared parameters
@@ -139,15 +122,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             for path in filtered_context_parameters
         ]
 
-    # Resyncs the shared context parameters, or otherwise said, the Tensor
-    # references
-    def _sync_shared_context_references(self, root_model):
-        for i, linked_params in enumerate(self.shared_context_parameters):
-            root_param = self.context_parameters[i]
-            ref = _get_module_by_path(root_model, root_param)
-            for param in linked_params:
-                _set_module_by_path(root_model, param, ref)
-
     # Resets the shared context parameters, which thankfully is just zeroing
     # out the Tensors, except that it needs to be detached from the
     # computational graph ... which means a new Tensor ...
@@ -162,8 +136,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
                 root_model, path,
                 nn.Parameter(torch.zeros_like(ref)),
             )
-
-        self._sync_shared_context_references(root_model)
 
     def _per_lang_pair_train_loss(
         self, lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
@@ -203,9 +175,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
                     model, param_name,
                     nn.Parameter(param - self.context_lr * gradient),
                 )
-
-            # Synchronize updates across shared context parameters
-            self._sync_shared_context_references(model)
 
         # Recompute loss after context parameter update
         loss, sample_size, logging_output = criterion(
@@ -280,9 +249,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
                     model, param_name,
                     nn.Parameter(param - self.context_lr * gradient)
                 )
-
-            # Synchronize updates across shared context parameters
-            self._sync_shared_context_references(model)
 
         # Recompute loss after context parameter update
         return criterion(model.models[lang_pair], sample[lang_pair])
