@@ -36,10 +36,12 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         super().__init__(args, dicts, training)
 
         self.lang_pairs = args.lang_pairs
+        if isinstance(self.lang_pairs, str):
+            self.lang_pairs = self.lang_pairs.split(",")
         self.eval_lang_pairs = self.lang_pairs
         self.model_lang_pairs = self.lang_pairs
-        assert len(self.lang_pairs) > 0
         self.n_tasks = len(self.lang_pairs)
+        assert self.n_tasks > 0
 
         if training:
             # Needed for shared TransformerDecoders (r_i, s_i, and b_i)
@@ -114,9 +116,11 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         filtered_context_parameters = [
             path
             for path in self.context_parameters
-            if f"r_{lang_pair_idx}" in path or
+            if (
+                f"r_{lang_pair_idx}" in path or
                 f"s_{lang_pair_idx}" in path or
                 f"b_{lang_pair_idx}" in path
+            )
         ]
 
         return filtered_context_parameters, [
