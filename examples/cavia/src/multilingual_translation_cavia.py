@@ -60,6 +60,18 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         self.context_parameters = None
         self.shared_context_parameters = None
 
+    def _verify_support(self, models):
+        base_lang_pair = self.lang_pairs[0]
+        base_model = models[base_lang_pair]
+
+        for model in models:
+            # Memory references should be the same
+            assert model == base_model
+            # Only one type of supported decoder ...
+            assert isinstance(
+                model.decoder, CAVIATransformerDecoder
+            )
+
     def _get_lang_pair_idx(self, lang_pair):
         # Set language pair index
         lang_pair_idx = [
@@ -156,11 +168,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
     def _per_lang_pair_train_loss(
         self, lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
     ):
-        # Only one type of supported model
-        assert isinstance(
-            model.models[lang_pair].decoder, CAVIATransformerDecoder
-        )
-
         # Update language pair index
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
@@ -218,6 +225,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
     def train_step(
         self, sample, model, criterion, optimizer, update_num, ignore_grad=False
     ):
+        self._verify_support(model.models)
+
         # Populate Task with context parameter information
         self._fetch_context_parameters(model)
 
@@ -232,11 +241,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         return agg_loss, agg_sample_size, agg_logging_output
 
     def _per_lang_pair_valid_loss(self, lang_pair, model, criterion, sample):
-        # Only one type of supported model
-        assert isinstance(
-            model.models[lang_pair].decoder, CAVIATransformerDecoder
-        )
-
         # Update language pair index
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
@@ -284,6 +288,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         return criterion(model.models[lang_pair], sample[lang_pair])
 
     def valid_step(self, sample, model, criterion):
+        self._verify_support(model.models)
+
         # Populate Task with context parameter information
         self._fetch_context_parameters(model)
 
@@ -292,16 +298,13 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
     def inference_step(
         self, generator, models, sample, prefix_tokens=None, constraints=None
     ):
+        self._verify_support(models)
+
         lang_pair = f"{self.args.source_lang}-{self.args.target_lang}"
 
         # Update language pair index
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         for model in models:
-            # Only one type of supported model
-            assert isinstance(
-                model.models[lang_pair].decoder, CAVIATransformerDecoder
-            )
-
             model.decoder.set_lang_pair_idx(lang_pair_idx)
 
         # No context parameter changes, used those saved within the model
