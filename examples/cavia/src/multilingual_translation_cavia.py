@@ -57,7 +57,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             self.context_lr = self.args.cavia_lr_inner
 
         # Hack for tracking in between functions without copying a bunch more code
-        self.meta_gradient = None
         self.context_parameters = None
         self.shared_context_parameters = None
 
