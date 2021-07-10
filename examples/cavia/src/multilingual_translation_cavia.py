@@ -57,20 +57,19 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             self.context_lr = self.args.cavia_lr_inner
 
         # Hack for tracking in between functions without copying a bunch more code
+        self._base_model = None
         self.context_parameters = None
         self.shared_context_parameters = None
 
     def _verify_support(self, models):
-        base_lang_pair = self.lang_pairs[0]
-        base_model = models[base_lang_pair]
+        # Only one type of supported decoder ...
+        assert isinstance(
+            self._base_model.decoder, CAVIATransformerDecoder
+        )
 
         for model in models:
             # Memory references should be the same
-            assert model == base_model
-            # Only one type of supported decoder ...
-            assert isinstance(
-                model.decoder, CAVIATransformerDecoder
-            )
+            assert model.decoder == self._base_model.decoder
 
     def _get_lang_pair_idx(self, lang_pair):
         # Set language pair index
@@ -194,7 +193,10 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
     def train_step(
         self, sample, model, criterion, optimizer, update_num, ignore_grad=False
     ):
-        self._verify_support(model.models)
+        # Doesn't matter which model, just need to make sure decoders
+        # are shared.
+        self._base_model = model.models[self.lang_pairs[0]]
+        self._verify_support([model.models[m] for m in model.models])
 
         # Populate Task with context parameter information
         self._fetch_context_parameters(model)
@@ -254,8 +256,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         return criterion(model.models[lang_pair], sample[lang_pair])
 
     def valid_step(self, sample, model, criterion):
-        self._verify_support(model.models)
-
         # Populate Task with context parameter information
         self._fetch_context_parameters(model)
 
@@ -264,8 +264,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
     def inference_step(
         self, generator, models, sample, prefix_tokens=None, constraints=None
     ):
-        self._verify_support(models)
-
         lang_pair = f"{self.args.source_lang}-{self.args.target_lang}"
 
         # Update language pair index
