@@ -30,6 +30,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
                             help='Inner-loop learning rate (task-specific)')
         parser.add_argument('--cavia-first-order', default=False, action='store_true',
                             help='Run first-order approximation version')
+        parser.add_argument('--cavia-relative-inner-lr', default=False, action='store_true',
+                            help='Inner-loop learning rate is relative to optimizer learning rate, with --cavia-lr-inner now being a multiplier')
         # fmt: on
 
     def __init__(self, args, dicts, training):
@@ -55,6 +57,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
             # Learning rate for context parameters
             self.context_lr = self.args.cavia_lr_inner
+            self.relative_lr = getattr(self.args, "cavia_relative_inner_lr", False)
 
         # Hack for tracking in between functions without copying a bunch more code
         self._base_model = None
@@ -146,6 +149,9 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         # Reset context parameters on every new task, or in this case
         # language pair
         self._reset_context_parameters(model, lang_pair_idx)
+
+        if self.relative_lr:
+            self.context_lr = optimizer.get_lr() * self.args.cavia_lr_inner
 
         for _ in range(self.args.cavia_inner_updates):
             # Fetch the current references to the Tensors used
