@@ -1,30 +1,5 @@
 #! /usr/bin/env bash
 
-# CAVIA-specific arguments
-#   --batch-ensemble-root 0
-#   --cavia-inner-updates 4
-#   --cavia-lr-inner 8.0
-#   --cavia-first-order
-
-# Example usage
-# train.sh \
-#   checkpoints/baseline \
-#   "0,1" \
-#   --task multilingual_translation \
-#   --arch multilingual_transformer_iwslt_de_en \
-#   --share-decoders --share-decoder-input-output-embed \
-#   --memory-efficient-fp16 &
-
-./train.sh \
-  checkpoints/cavia_LL_4_8 \
-  "0,1" \
-  --user-dir examples/cavia/src \
-  --task multilingual_translation_cavia \
-  --batch-ensemble-root 0 --cavia-inner-updates 4 --cavia-lr-inner 8.0 \
-  --arch cavia_multilingual_transformer \
-  --share-decoders --share-decoder-input-output-embed \
-  --memory-efficient-fp16 &
-
 CHECKPOINT="$1"
 shift
 
