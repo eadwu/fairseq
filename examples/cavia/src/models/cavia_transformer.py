@@ -90,7 +90,7 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
 
             if hasattr(self.fc1, "bias"):
                 b_i = nn.Parameter(torch.zeros(
-                    args.decoder_ffn_embed_dim,
+                    args.decoder_ffn_embed_dim, 1,
                     dtype=torch.float16 if args.fp16 else torch.float32,
                     device='cuda' if torch.cuda.is_available() else 'cpu',
                 ), requires_grad=True)
@@ -229,7 +229,7 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         W = getattr(self.fc1, "weight") * w_i
         x = x @ W.T
         if hasattr(self.fc1, "bias"):
-            b_i = getattr(self, f"context_param-b_{self.lang_pair_idx}")
+            b_i = getattr(self, f"context_param-b_{self.lang_pair_idx}").squeeze(dim=1)
             b = getattr(self.fc1, "bias") * b_i
             x = x + b
 
