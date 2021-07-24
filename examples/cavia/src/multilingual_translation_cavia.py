@@ -36,6 +36,8 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
                             help='cavia_lr_inner is now relative to the global learning rate as a multiplier')
         parser.add_argument('--cavia-relative-optimizer-lr', default=False, action='store_true',
                             help='Learning rate is now relative to the optimizer learning rate')
+        parser.add_argument('--cavia-continous-learning', default=False, action='store_true',
+                            help='Reuse context parameters instead of resetting them')
         # fmt: on
 
     def __init__(self, args, dicts, training):
@@ -54,10 +56,14 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             assert self.args.share_decoders
 
             # Validate argument batch_ensemble_root
-            assert args.batch_ensemble_root == -1 or (
-                args.batch_ensemble_root >= 0 and
-                args.batch_ensemble_root < len(self.lang_pairs)
+            batch_ensemble_root = getattr(self.args, "batch_ensemble_root", -1)
+            assert batch_ensemble_root == -1 or (
+                batch_ensemble_root >= 0 and
+                batch_ensemble_root < len(self.lang_pairs)
             )
+
+            # Continuous Learning
+            self.continous_learning = getattr(self.args, "cavia_continous_learning", False)
 
             # Learning rate for context parameters
             self.context_lr = self.args.cavia_lr_inner
@@ -132,19 +138,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             for path in filtered_context_parameters
         ]
 
-    # Resets the shared context parameters, which thankfully is just zeroing
-    # out the Tensors, except that it needs to be detached from the
-    # computational graph ... which means a new Tensor ...
-    def _reset_context_parameters(self, root_model, lang_pair_idx):
-        filtered_context_parameters, _ = self._get_context_parameters(
-            root_model, lang_pair_idx
-        )
-
-        for path in filtered_context_parameters:
-            ref = _get_module_by_path(root_model, path)
-            val = nn.Parameter(torch.ones_like(ref))
-            _set_module_by_path(root_model, path, val)
-
     def _per_lang_pair_train_loss(
         self, lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
     ):
@@ -154,7 +147,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         # Reset context parameters on every new task, or in this case
         # language pair
-        self._reset_context_parameters(model, lang_pair_idx)
+        model.models[lang_pair].decoder.reset_context_parameters(self.continous_learning)
 
         if self.relative_optimizer_lr:
             self.context_lr = optimizer.get_lr() * self.args.cavia_lr_inner
@@ -199,7 +192,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         optimizer.backward(loss)
 
         # Flush context parameters just in case
-        self._reset_context_parameters(model, lang_pair_idx)
+        model.models[lang_pair].decoder.reset_context_parameters(self.continous_learning)
         return loss, sample_size, logging_output
 
     def train_step(
@@ -230,7 +223,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         # Reset context parameters on every new task, or in this case
         # language pair
-        self._reset_context_parameters(model, lang_pair_idx)
+        model.models[lang_pair].decoder.reset_context_parameters(self.continous_learning)
 
         for _ in range(self.args.cavia_inner_updates):
             # Fetch the current references to the Tensors used

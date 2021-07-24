@@ -32,6 +32,10 @@ class CAVIATransformerDecoder(TransformerDecoder):
         for layer in self.layers:
             layer.set_lang_pair_idx(lang_pair_idx)
 
+    def reset_context_parameters(self, detach=False):
+        for layer in self.layers:
+            layer.reset_context_parameters(detach)
+
     def _build_decoder_layer(self, args, no_encoder_attn=False):
         return CAVIATransformerDecoderLayer(
             args, no_encoder_attn=no_encoder_attn
@@ -99,6 +103,32 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
             self.batch_ensemble_root == -1 or
             lang_pair_idx == self.batch_ensemble_root
         )
+
+    def reset_context_parameters(self, detach=False):
+        lang_pair_idx = self.lang_pair_idx
+
+        r_i = getattr(self, f"context_param-r_{lang_pair_idx}")
+        s_i = getattr(self, f"context_param-s_{lang_pair_idx}")
+
+        if detach:
+            r_i = r_i.detach().clone()
+            s_i = s_i.detach().clone()
+        else:
+            r_i = torch.ones_like(r_i)
+            s_i = torch.ones_like(s_i)
+
+        setattr(self, f"context_param-r_{lang_pair_idx}", nn.Parameter(r_i))
+        setattr(self, f"context_param-s_{lang_pair_idx}", nn.Parameter(s_i))
+
+        if hasattr(self.fc1, "bias"):
+            b_i = getattr(self, f"context_param-b_{lang_pair_idx}")
+
+            if detach:
+                b_i = b_i.detach().clone()
+            else:
+                b_i = torch.ones_like(b_i)
+
+            setattr(self, f"context_param-b_{lang_pair_idx}", nn.Parameter(b_i))
 
     def forward(
         self,
