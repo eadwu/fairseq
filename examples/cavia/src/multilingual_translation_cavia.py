@@ -33,7 +33,9 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         parser.add_argument('--cavia-first-order', default=False, action='store_true',
                             help='Run first-order approximation version')
         parser.add_argument('--cavia-relative-inner-lr', default=False, action='store_true',
-                            help='Inner-loop learning rate is relative to optimizer learning rate, with --cavia-lr-inner now being a multiplier')
+                            help='cavia_lr_inner is now relative to the global learning rate as a multiplier')
+        parser.add_argument('--cavia-relative-optimizer-lr', default=False, action='store_true',
+                            help='Learning rate is now relative to the optimizer learning rate')
         # fmt: on
 
     def __init__(self, args, dicts, training):
@@ -60,6 +62,10 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
             # Learning rate for context parameters
             self.context_lr = self.args.cavia_lr_inner
             self.relative_lr = getattr(self.args, "cavia_relative_inner_lr", False)
+            self.relative_optimizer_lr = getattr(self.args, "cavia_relative_optimizer_lr", False)
+
+            if self.relative_lr:
+                self.context_lr = self.args.lr[0] * self.args.cavia_lr_inner
 
         # Hack for tracking in between functions without copying a bunch more code
         self._base_model = None
@@ -150,7 +156,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         # language pair
         self._reset_context_parameters(model, lang_pair_idx)
 
-        if self.relative_lr:
+        if self.relative_optimizer_lr:
             self.context_lr = optimizer.get_lr() * self.args.cavia_lr_inner
 
         for _ in range(self.args.cavia_inner_updates):
