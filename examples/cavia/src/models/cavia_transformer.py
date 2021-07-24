@@ -84,6 +84,8 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
                 device='cuda' if torch.cuda.is_available() else 'cpu',
             ), requires_grad=True)
 
+            nn.init.kaiming_uniform_(r_i, a=math.sqrt(5))
+            nn.init.kaiming_uniform_(s_i, a=math.sqrt(5))
             self.register_parameter(f"context_param-r_{i}", r_i)
             self.register_parameter(f"context_param-s_{i}", s_i)
 
@@ -93,6 +95,11 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
                     dtype=torch.float16 if args.fp16 else torch.float32,
                     device='cuda' if torch.cuda.is_available() else 'cpu',
                 ), requires_grad=True)
+
+                W_i = r_i @ s_i.T
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(W_i)
+                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+                nn.init.uniform_(b_i, -bound, bound)
 
                 self.register_parameter(f"context_param-b_{i}", b_i)
 
@@ -116,6 +123,8 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         else:
             r_i = torch.ones_like(r_i)
             s_i = torch.ones_like(s_i)
+            nn.init.kaiming_uniform_(r_i, a=math.sqrt(5))
+            nn.init.kaiming_uniform_(s_i, a=math.sqrt(5))
 
         setattr(self, f"context_param-r_{lang_pair_idx}", nn.Parameter(r_i))
         setattr(self, f"context_param-s_{lang_pair_idx}", nn.Parameter(s_i))
@@ -127,6 +136,10 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
                 b_i = b_i.detach().clone()
             else:
                 b_i = torch.ones_like(b_i)
+                W_i = r_i @ s_i.T
+                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(W_i)
+                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+                nn.init.uniform_(b_i, -bound, bound)
 
             setattr(self, f"context_param-b_{lang_pair_idx}", nn.Parameter(b_i))
 
