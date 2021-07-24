@@ -25,8 +25,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
         # args for Training with BatchEnsemble
         parser.add_argument('--batch-ensemble-root', type=int, default=-1,
                             help='Batch Ensemble root task (0-based) for lifelong learning')
-        parser.add_argument('--batch-ensemble-kaiming-init', default=False, action='store_true',
-                            help='Initialize weights and biases with kaiming uniform')
         # args for Meta-Training with CAVIA
         parser.add_argument('--cavia-inner-updates', type=int, default=1,
                             help='Number of inner-loop updates (during training)')
@@ -58,9 +56,6 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
                 args.batch_ensemble_root >= 0 and
                 args.batch_ensemble_root < len(self.lang_pairs)
             )
-
-            # BatchEnsemble
-            self.kaiming_init = getattr(self.args, "batch_ensemble_kaiming_init", False)
 
             # Learning rate for context parameters
             self.context_lr = self.args.cavia_lr_inner
@@ -141,10 +136,7 @@ class MultilingualTranslationCAVIATask(MultilingualTranslationTask):
 
         for path in filtered_context_parameters:
             ref = _get_module_by_path(root_model, path)
-            val = nn.Parameter(torch.zeros_like(ref))
-
-            if self.kaiming_init:
-                nn.init.kaiming_uniform_(val, a=math.sqrt(5))
+            val = nn.Parameter(torch.ones_like(ref))
             _set_module_by_path(root_model, path, val)
 
     def _per_lang_pair_train_loss(

@@ -60,7 +60,6 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
 
         # BatchEnsemble
         self.batch_ensemble_root = getattr(args, "batch_ensemble_root", -1)
-        self.kaiming_init = getattr(args, "batch_ensemble_kaiming_init", False)
 
         # BatchEnsemble current language pair [index]
         self.lang_pair_idx = None
@@ -70,12 +69,12 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
             # Due to the manual gradient and Tensor processing steps, these
             # should only _ever_ be indexed through their registered parameter
             # names.
-            r_i = nn.Parameter(torch.zeros(
+            r_i = nn.Parameter(torch.ones(
                 args.decoder_ffn_embed_dim, 1,
                 dtype=torch.float16 if args.fp16 else torch.float32,
                 device='cuda' if torch.cuda.is_available() else 'cpu',
             ), requires_grad=True)
-            s_i = nn.Parameter(torch.zeros(
+            s_i = nn.Parameter(torch.ones(
                 self.embed_dim, 1,
                 dtype=torch.float16 if args.fp16 else torch.float32,
                 device='cuda' if torch.cuda.is_available() else 'cpu',
@@ -84,20 +83,14 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
             self.register_parameter(f"context_param-r_{i}", r_i)
             self.register_parameter(f"context_param-s_{i}", s_i)
 
-            if self.kaiming_init:
-                nn.init.kaiming_uniform_(r_i, a=math.sqrt(5))
-                nn.init.kaiming_uniform_(s_i, a=math.sqrt(5))
-
             if hasattr(self.fc1, "bias"):
-                b_i = nn.Parameter(torch.zeros(
+                b_i = nn.Parameter(torch.ones(
                     args.decoder_ffn_embed_dim, 1,
                     dtype=torch.float16 if args.fp16 else torch.float32,
                     device='cuda' if torch.cuda.is_available() else 'cpu',
                 ), requires_grad=True)
 
                 self.register_parameter(f"context_param-b_{i}", b_i)
-                if self.kaiming_init:
-                    nn.init.kaiming_uniform_(b_i, a=math.sqrt(5))
 
     def set_lang_pair_idx(self, lang_pair_idx):
         self.lang_pair_idx = lang_pair_idx
