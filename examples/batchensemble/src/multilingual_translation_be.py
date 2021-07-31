@@ -87,6 +87,9 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
                 if hasattr(param_group, "_name") and "context_param" in param_group["_name"]:
                     print(param_group["_name"], "\t", param_group["lr"])
 
+            import sys
+            sys.stdout.flush()
+
         return super().train_step(
             sample, model, criterion, optimizer, update_num, ignore_grad
         )
