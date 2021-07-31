@@ -81,9 +81,9 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
                     param_group["lr"] = self.context_lr
             optimizer.load_state_dict(optimizer_state)
 
-            print("New Optimizer State")
+            print("New Optimizer Learning Rates")
             for var_name in optimizer_state:
-                print(var_name, "\t", optimizer_state[var_name])
+                print(var_name, "\t", optimizer_state[var_name]["lr"])
 
         return super().train_step(
             self, sample, model, criterion, optimizer, update_num, ignore_grad
