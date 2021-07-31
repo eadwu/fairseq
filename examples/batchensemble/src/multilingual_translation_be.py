@@ -82,8 +82,10 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
             optimizer.load_state_dict(optimizer_state)
 
             print("New Optimizer Learning Rates")
-            for var_name in optimizer_state:
-                print(var_name, "\t", optimizer_state[var_name]["lr"])
+            optimizer_state = optimizer.state_dict()
+            for param_group in optimizer_state["param_groups"]:
+                if hasattr(param_group, "_name") and "context_param" in param_group["_name"]:
+                    print(param_group["_name"], "\t", param_group["lr"])
 
         return super().train_step(
             self, sample, model, criterion, optimizer, update_num, ignore_grad
