@@ -75,16 +75,25 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
 
             # Update the state dictionary of the optimizer to reflect the
             # new learning rates for the specified parameters
+            print("Fixing Optimizer Learning Rates")
             optimizer_state = optimizer.state_dict()
             for param_group in optimizer_state["param_groups"]:
-                if hasattr(param_group, "_name") and "context_param" in param_group["_name"]:
+                if "_name" in param_group and "context_param" in param_group["_name"]:
+                    print(
+                        "Adjusting ",
+                        param_group["_name"],
+                        " from ",
+                        param_group["lr"],
+                        " to ",
+                        self.context_lr
+                    )
                     param_group["lr"] = self.context_lr
             optimizer.load_state_dict(optimizer_state)
 
-            print("New Optimizer Learning Rates")
+            print("New Optimizer State")
             optimizer_state = optimizer.state_dict()
             for param_group in optimizer_state["param_groups"]:
-                if hasattr(param_group, "_name") and "context_param" in param_group["_name"]:
+                if "_name" in param_group and "context_param" in param_group["_name"]:
                     print(param_group["_name"], "\t", param_group["lr"])
 
             import sys
