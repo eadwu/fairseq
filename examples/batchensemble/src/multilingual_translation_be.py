@@ -88,7 +88,7 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
                     print(param_group["_name"], "\t", param_group["lr"])
 
         return super().train_step(
-            self, sample, model, criterion, optimizer, update_num, ignore_grad
+            sample, model, criterion, optimizer, update_num, ignore_grad
         )
 
     def _per_lang_pair_valid_loss(self, lang_pair, model, criterion, sample):
