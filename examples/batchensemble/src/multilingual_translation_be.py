@@ -11,8 +11,10 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
         MultilingualTranslationTask.add_args(parser)
         # fmt: off
         # args for Training with BatchEnsemble
+        parser.add_argument('--batch-ensemble-vanilla', default=False, action='store_true',
+                            help='Adjusts the behavior of BatchEnsemble to be like that of the paper, an ensemble')
         parser.add_argument('--batch-ensemble-root', type=int, default=-1,
-                            help='Batch Ensemble root task (0-based) for lifelong learning')
+                            help='BatchEnsemble root task (0-based) for lifelong learning')
         parser.add_argument('--batch-ensemble-linear-init', default=False, action='store_true',
                             help='Initialize weights and biases akin to nn.Linear')
         parser.add_argument('--batch-ensemble-lr-multiplier', type=float, default=1.0,

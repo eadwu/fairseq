@@ -59,6 +59,7 @@ class BatchEnsembleTransformerDecoderLayer(TransformerDecoderLayer):
         self.n_tasks = len(self.lang_pairs)
 
         # BatchEnsemble
+        self.batch_ensemble_vanilla = getattr(args, "batch_ensemble_vanilla", False)
         self.batch_ensemble_root = getattr(args, "batch_ensemble_root", -1)
         self.linear_init = getattr(args, "batch_ensemble_linear_init", False)
 
@@ -235,15 +236,34 @@ class BatchEnsembleTransformerDecoderLayer(TransformerDecoderLayer):
         if self.normalize_before:
             x = self.final_layer_norm(x)
 
-        # Independent r_i, s_i, and b_i for each language pair
-        r_i, s_i, b_i = self.current_batch_parameters()
+        if not self.batch_ensemble_vanilla:
+            # Independent r_i, s_i, and b_i for each language pair
+            r_i, s_i, b_i = self.current_batch_parameters()
 
-        w_i = r_i @ s_i.T
-        W = getattr(self.fc1, "weight") * w_i
-        x = x @ W.T
-        if b_i is not None:
-            b = getattr(self.fc1, "bias") * b_i
-            x = x + b
+            w_i = r_i @ s_i.T
+            W = getattr(self.fc1, "weight") * w_i
+            x = x @ W.T
+            if b_i is not None:
+                b = getattr(self.fc1, "bias") * b_i
+                x = x + b
+        else:
+            prev_lang_pair_idx = self.lang_pair_idx
+
+            # BatchEnsemble ensemble
+            sum = 0
+            for i in range(self.n_tasks):
+                self.set_lang_pair_idx(i)
+                r_i, s_i, b_i = self.current_batch_parameters()
+                w_i = r_i @ s_i.T
+                W = getattr(self.fc1, "weight") * w_i
+                xi = x @ W.T
+                if b_i is not None:
+                    b = getattr(self.fc1, "bias") * b_i
+                    xi = xi + b
+                sum = sum + xi
+            x = sum / self.n_tasks
+
+            self.set_lang_pair_idx(prev_lang_pair_idx)
 
         x = self.activation_fn(x)
         x = self.activation_dropout_module(x)
