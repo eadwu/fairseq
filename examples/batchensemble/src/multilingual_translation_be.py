@@ -15,6 +15,8 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
                             help='Batch Ensemble root task (0-based) for lifelong learning')
         parser.add_argument('--batch-ensemble-linear-init', default=False, action='store_true',
                             help='Initialize weights and biases akin to nn.Linear')
+        parser.add_argument('--batch-ensemble-lr-multiplier', type=float, default=1.0,
+                            help='Learning rate multiplier for BatchEnsemble parameters')
         # fmt: on
 
     def __init__(self, args, dicts, training):
@@ -34,6 +36,11 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
                 args.batch_ensemble_root >= 0 and
                 args.batch_ensemble_root < len(self.lang_pairs)
             )
+
+            self.lr_multiplier = getattr(args, "batch_ensemble_lr_multiplier", 1.0)
+            self.context_lr = self.args.lr[0] * self.lr_multiplier
+            # Tracking variable to only update LR once
+            self.lr_fixed = False
 
     def _get_lang_pair_idx(self, lang_pair):
         # Set language pair index
@@ -56,6 +63,28 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
 
         return super()._per_lang_pair_train_loss(
             lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
+        )
+
+    def train_step(
+        self, sample, model, criterion, optimizer, update_num, ignore_grad=False
+    ):
+        if not self.lr_fixed:
+            self.lr_fixed = True
+
+            # Update the state dictionary of the optimizer to reflect the
+            # new learning rates for the specified parameters
+            optimizer_state = optimizer.state_dict()
+            for param_group in optimizer_state["param_groups"]:
+                if hasattr(param_group, "_name") and "context_param" in param_group["_name"]:
+                    param_group["lr"] = self.context_lr
+            optimizer.load_state_dict(optimizer_state)
+
+            print("New Optimizer State")
+            for var_name in optimizer_state:
+                print(var_name, "\t", optimizer_state[var_name])
+
+        return super().train_step(
+            self, sample, model, criterion, optimizer, update_num, ignore_grad
         )
 
     def _per_lang_pair_valid_loss(self, lang_pair, model, criterion, sample):
