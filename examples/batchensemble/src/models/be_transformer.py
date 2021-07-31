@@ -107,11 +107,14 @@ class BatchEnsembleTransformerDecoderLayer(TransformerDecoderLayer):
             lang_pair_idx == self.batch_ensemble_root
         )
 
-    def current_batch_parameters(self):
-        r_i = getattr(self, f"context_param-r_{self.lang_pair_idx}")
-        s_i = getattr(self, f"context_param-s_{self.lang_pair_idx}")
+    def current_batch_parameters(self, lang_pair_idx=None):
+        if lang_pair_idx == None:
+            lang_pair_idx = self.lang_pair_idx
+
+        r_i = getattr(self, f"context_param-r_{lang_pair_idx}")
+        s_i = getattr(self, f"context_param-s_{lang_pair_idx}")
         b_i = (
-            getattr(self, f"context_param-b_{self.lang_pair_idx}")
+            getattr(self, f"context_param-b_{lang_pair_idx}")
             if hasattr(self.fc1, "bias")
             else None
         )
