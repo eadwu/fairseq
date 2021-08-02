@@ -19,6 +19,8 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
                             help='Initialize weights and biases akin to nn.Linear')
         parser.add_argument('--batch-ensemble-lr-multiplier', type=float, default=1.0,
                             help='Learning rate multiplier for BatchEnsemble parameters')
+        parser.add_argument('--batch-ensemble-lr-relative', default=False, action='store_true',
+                            help='Learning rate relative to optimizer.get_lr()')
         # fmt: on
 
     def __init__(self, args, dicts, training):
@@ -41,6 +43,7 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
 
             self.lr_multiplier = getattr(args, "batch_ensemble_lr_multiplier", 1.0)
             self.context_lr = self.args.lr[0] * self.lr_multiplier
+            self.relative_lr = getattr(args, "batch_ensemble_lr_relative", False)
             # Tracking variable to only update LR once
             self.lr_fixed = False
 
@@ -70,8 +73,11 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
     def train_step(
         self, sample, model, criterion, optimizer, update_num, ignore_grad=False
     ):
-        if not self.lr_fixed:
+        if self.relative_lr or not self.lr_fixed:
             self.lr_fixed = True
+
+            if self.relative_lr:
+                self.context_lr = optimizer.get_lr() * self.lr_multiplier
 
             # Update the state dictionary of the optimizer to reflect the
             # new learning rates for the specified parameters
