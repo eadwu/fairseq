@@ -11,15 +11,13 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
         MultilingualTranslationTask.add_args(parser)
         # fmt: off
         # args for Training with BatchEnsemble
-        parser.add_argument('--batch-ensemble-vanilla', default=False, action='store_true',
+        parser.add_argument('--batchensemble-vanilla', default=False, action='store_true',
                             help='Adjusts the behavior of BatchEnsemble to be like that of the paper, an ensemble')
-        parser.add_argument('--batch-ensemble-root', type=int, default=-1,
+        parser.add_argument('--batchensemble-lifelong-learning', default=False, action='store_true',
                             help='BatchEnsemble root task (0-based) for lifelong learning')
-        parser.add_argument('--batch-ensemble-linear-init', default=False, action='store_true',
-                            help='Initialize weights and biases akin to nn.Linear')
-        parser.add_argument('--batch-ensemble-lr-multiplier', type=float, default=1.0,
+        parser.add_argument('--batchensemble-lr-multiplier', type=float, default=1.0,
                             help='Learning rate multiplier for BatchEnsemble parameters')
-        parser.add_argument('--batch-ensemble-lr-relative', default=False, action='store_true',
+        parser.add_argument('--batchensemble-lr-relative', default=False, action='store_true',
                             help='Learning rate relative to optimizer.get_lr()')
         # fmt: on
 
@@ -31,21 +29,19 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
             self.lang_pairs = self.lang_pairs.split(",")
         self.eval_lang_pairs = self.lang_pairs
         self.model_lang_pairs = self.lang_pairs
+
         self.n_tasks = len(self.lang_pairs)
         assert self.n_tasks > 0
 
         if training:
-            # Validate argument batch_ensemble_root
-            assert args.batch_ensemble_root == -1 or (
-                args.batch_ensemble_root >= 0 and
-                args.batch_ensemble_root < len(self.lang_pairs)
+            self.lr_multiplier = getattr(
+                args, "batchensemble_lr_multiplier", 1.0
+            )
+            self.relative_lr = getattr(
+                args, "batchensemble_lr_relative", False
             )
 
-            self.lr_multiplier = getattr(args, "batch_ensemble_lr_multiplier", 1.0)
             self.context_lr = self.args.lr[0] * self.lr_multiplier
-            self.relative_lr = getattr(args, "batch_ensemble_lr_relative", False)
-            # Tracking variable to only update LR once
-            self.lr_fixed = False
 
     def _get_lang_pair_idx(self, lang_pair):
         # Set language pair index
