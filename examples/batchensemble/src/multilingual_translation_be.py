@@ -69,37 +69,17 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
     def train_step(
         self, sample, model, criterion, optimizer, update_num, ignore_grad=False
     ):
-        if self.relative_lr or not self.lr_fixed:
-            self.lr_fixed = True
+        # Calculate the decaying learning rate if requested
+        if self.relative_lr:
+            self.context_lr = optimizer.get_lr() * self.lr_multiplier
 
-            if self.relative_lr:
-                self.context_lr = optimizer.get_lr() * self.lr_multiplier
-
-            # Update the state dictionary of the optimizer to reflect the
-            # new learning rates for the specified parameters
-            print("Fixing Optimizer Learning Rates")
-            optimizer_state = optimizer.state_dict()
-            for param_group in optimizer_state["param_groups"]:
-                if "_name" in param_group and "context_param" in param_group["_name"]:
-                    print(
-                        "Adjusting ",
-                        param_group["_name"],
-                        " from ",
-                        param_group["lr"],
-                        " to ",
-                        self.context_lr
-                    )
-                    param_group["lr"] = self.context_lr
-            optimizer.load_state_dict(optimizer_state)
-
-            print("New Optimizer State")
-            optimizer_state = optimizer.state_dict()
-            for param_group in optimizer_state["param_groups"]:
-                if "_name" in param_group and "context_param" in param_group["_name"]:
-                    print(param_group["_name"], "\t", param_group["lr"])
-
-            import sys
-            sys.stdout.flush()
+        # Update the state dictionary of the optimizer to reflect the
+        # new learning rates for the specified parameters
+        optimizer_state = optimizer.state_dict()
+        for param_group in optimizer_state["param_groups"]:
+            if "_name" in param_group and "context_param" in param_group["_name"]:
+                param_group["lr"] = self.context_lr
+        optimizer.load_state_dict(optimizer_state)
 
         return super().train_step(
             sample, model, criterion, optimizer, update_num, ignore_grad
