@@ -28,6 +28,10 @@ class BatchEnsembleTransformerDecoder(TransformerDecoder):
             ]
         )
 
+    def is_train_step(self, bool):
+        for layer in self.layers:
+            layer.is_train_step(bool)
+
     def set_lang_pair_idx(self, lang_pair_idx):
         for layer in self.layers:
             layer.set_lang_pair_idx(lang_pair_idx)
@@ -56,71 +60,56 @@ class BatchEnsembleTransformerDecoderLayer(TransformerDecoderLayer):
         self.lang_pairs = args.lang_pairs
         if isinstance(self.lang_pairs, str):
             self.lang_pairs = self.lang_pairs.split(",")
-        self.n_tasks = len(self.lang_pairs)
 
-        # BatchEnsemble
-        self.batch_ensemble_vanilla = getattr(args, "batch_ensemble_vanilla", False)
-        self.batch_ensemble_root = getattr(args, "batch_ensemble_root", -1)
-        self.linear_init = getattr(args, "batch_ensemble_linear_init", False)
+        self.ensemble_size = len(self.lang_pairs)
+        self.has_bias = hasattr(self.fc1, "bias")
+
+        # Model tate information
+        self.train_step = False
 
         # BatchEnsemble current language pair [index]
         self.lang_pair_idx = None
+        self.vanilla_batchensemble = getattr(
+            self.args, "batchensemble_vanilla", False
+        )
+        self.lifelong_learning = getattr(
+            self.args, "batchensemble_lifelong_learning", False
+        )
 
-        for i in range(self.n_tasks):
-            # Initialize BatchEnsemble parameters
-            r_i = nn.Parameter(torch.zeros(
-                args.decoder_ffn_embed_dim, 1,
+        # Initialize BatchEnsemble parameters
+        # Stacked r_i matrix
+        self.alpha = nn.Parameter(torch.ones(
+            self.ensemble_size, self.embed_dim,
+            dtype=torch.float16 if args.fp16 else torch.float32,
+            device='cuda' if torch.cuda.is_available() else 'cpu'
+        ), requires_grad=True)
+        # Stacked s_i matrix
+        self.gamma = nn.Parameter(torch.ones(
+            self.ensemble_size, args.decoder_ffn_embed_dim,
+            dtype=torch.float16 if args.fp16 else torch.float32,
+            device='cuda' if torch.cuda.is_available() else 'cpu'
+        ), requires_grad=True)
+
+        self.register_parameter("context_param-alpha", self.alpha)
+        self.register_parameter("context_param-gamma", self.gamma)
+
+        if self.has_bias:
+            # Stacked b_i matrix
+            self.ensemble_bias = nn.Parameter(torch.zeros(
+                self.ensemble_size, args.decoder_ffn_embed_dim,
                 dtype=torch.float16 if args.fp16 else torch.float32,
                 device='cuda' if torch.cuda.is_available() else 'cpu',
             ), requires_grad=True)
-            s_i = nn.Parameter(torch.zeros(
-                self.embed_dim, 1,
-                dtype=torch.float16 if args.fp16 else torch.float32,
-                device='cuda' if torch.cuda.is_available() else 'cpu',
-            ), requires_grad=True)
 
-            self.register_parameter(f"context_param-r_{i}", r_i)
-            self.register_parameter(f"context_param-s_{i}", s_i)
+            self.register_parameter(
+                "context_param-ensemble_bias", self.ensemble_bias
+            )
 
-            if self.linear_init:
-                nn.init.kaiming_uniform_(r_i, a=math.sqrt(5))
-                nn.init.kaiming_uniform_(s_i, a=math.sqrt(5))
-
-            if hasattr(self.fc1, "bias"):
-                b_i = nn.Parameter(torch.zeros(
-                    args.decoder_ffn_embed_dim,
-                    dtype=torch.float16 if args.fp16 else torch.float32,
-                    device='cuda' if torch.cuda.is_available() else 'cpu',
-                ), requires_grad=True)
-
-                self.register_parameter(f"context_param-b_{i}", b_i)
-                if self.linear_init:
-                    w_i = r_i @ s_i.T
-                    fan_in, _ = nn.init._calculate_fan_in_and_fan_out(w_i)
-                    bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-                    nn.init.uniform_(b_i, -bound, bound)
+    def is_train_step(self, bool):
+        self.train_step = bool
 
     def set_lang_pair_idx(self, lang_pair_idx):
         self.lang_pair_idx = lang_pair_idx
-        # Set gradient on shared weights based on lifelong learning
-        self.fc1.requires_grad_(
-            self.batch_ensemble_root == -1 or
-            lang_pair_idx == self.batch_ensemble_root
-        )
-
-    def current_batch_parameters(self, lang_pair_idx=None):
-        if lang_pair_idx == None:
-            lang_pair_idx = self.lang_pair_idx
-
-        r_i = getattr(self, f"context_param-r_{lang_pair_idx}")
-        s_i = getattr(self, f"context_param-s_{lang_pair_idx}")
-        b_i = (
-            getattr(self, f"context_param-b_{lang_pair_idx}")
-            if hasattr(self.fc1, "bias")
-            else None
-        )
-
-        return r_i, s_i, b_i
 
     def forward(
         self,
@@ -236,34 +225,41 @@ class BatchEnsembleTransformerDecoderLayer(TransformerDecoderLayer):
         if self.normalize_before:
             x = self.final_layer_norm(x)
 
-        if not self.batch_ensemble_vanilla:
-            # Independent r_i, s_i, and b_i for each language pair
-            r_i, s_i, b_i = self.current_batch_parameters()
+        if self.vanilla_batchensemble:
+            ensemble_outputs = []
 
-            w_i = r_i @ s_i.T
-            W = getattr(self.fc1, "weight") * w_i
-            x = x @ W.T
-            if b_i is not None:
-                b = getattr(self.fc1, "bias") * b_i
-                x = x + b
+            x_components = torch.split(
+                x, x.shape[0] // self.ensemble_size
+            )
+
+            for i in range(self.ensemble_size):
+                x_i = x_components[i]
+
+                self.fc1.requires_grad_(
+                    not self.lifelong_learning or
+                    self.lifelong_learning and i == 0
+                )
+
+                output = x_i * self.alpha[i]
+                output = self.fc1(output)
+                output = output * self.gamma[i]
+                if self.has_bias:
+                    output = output + self.ensemble_bias[i]
+
+                ensemble_outputs.append(output)
+
+            x = torch.cat(ensemble_outputs, dim=0)
         else:
-            prev_lang_pair_idx = self.lang_pair_idx
+            self.fc1.requires_grad_(
+                not self.lifelong_learning or
+                self.lifelong_learning and self.lang_pair_idx == 0
+            )
 
-            # BatchEnsemble ensemble
-            sum = 0
-            for i in range(self.n_tasks):
-                self.set_lang_pair_idx(i)
-                r_i, s_i, b_i = self.current_batch_parameters()
-                w_i = r_i @ s_i.T
-                W = getattr(self.fc1, "weight") * w_i
-                xi = x @ W.T
-                if b_i is not None:
-                    b = getattr(self.fc1, "bias") * b_i
-                    xi = xi + b
-                sum = sum + xi
-            x = sum / self.n_tasks
-
-            self.set_lang_pair_idx(prev_lang_pair_idx)
+            x = x * self.alpha[self.lang_pair_idx]
+            x = self.fc1(x) * self.gamma[self.lang_pair_idx]
+            if self.has_bias:
+                bias = self.ensemble_bias[self.lang_pair_idx]
+                x = x + bias
 
         x = self.activation_fn(x)
         x = self.activation_dropout_module(x)

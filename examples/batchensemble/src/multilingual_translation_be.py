@@ -1,6 +1,8 @@
 from fairseq.tasks import register_task
 from fairseq.tasks.multilingual_translation import MultilingualTranslationTask
 
+import torch
+
 
 @register_task("multilingual_translation_be")
 class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
@@ -58,9 +60,24 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
     def _per_lang_pair_train_loss(
         self, lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
     ):
+        # Update model state machine
+        model.models[lang_pair].decoder.is_train_step(True)
+
         # Update language pair index
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
+
+        # Fixup target vector based off ensembling size
+        sample[lang_pair]["net_input"]["src_tokens"] = torch.tile(
+            sample[lang_pair]["net_input"]["src_tokens"], [self.n_tasks, 1]
+        )
+        sample[lang_pair]["net_input"]["src_lengths"] = torch.tile(
+            sample[lang_pair]["net_input"]["src_lengths"], [self.n_tasks]
+        )
+        sample[lang_pair]["target"] = torch.tile(
+            sample[lang_pair]["target"], [self.n_tasks]
+        )
+        sample[lang_pair]["ntokens"] *= self.n_tasks
 
         return super()._per_lang_pair_train_loss(
             lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
@@ -86,6 +103,9 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
         )
 
     def _per_lang_pair_valid_loss(self, lang_pair, model, criterion, sample):
+        # Update model state machine
+        model.models[lang_pair].decoder.is_train_step(False)
+
         # Update language pair index
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
@@ -99,9 +119,10 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
     ):
         lang_pair = f"{self.args.source_lang}-{self.args.target_lang}"
 
-        # Update language pair index
+        # Update model state
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         for model in models:
+            model.decoder.is_train_step(False)
             model.decoder.set_lang_pair_idx(lang_pair_idx)
 
         return super().inference_step(
