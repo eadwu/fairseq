@@ -30,6 +30,28 @@ class BEFairseqEncoderDecoderModel(FairseqEncoderDecoderModel):
         self.avg_ensemble = avg_ensemble
 
     def forward(self, src_tokens, src_lengths, prev_output_tokens, **kwargs):
+        """
+        Run the forward pass for an encoder-decoder model.
+
+        First feed a batch of source tokens through the encoder. Then, feed the
+        encoder output and previous decoder outputs (i.e., teacher forcing) to
+        the decoder to produce the next outputs::
+
+            encoder_out = self.encoder(src_tokens, src_lengths)
+            return self.decoder(prev_output_tokens, encoder_out)
+
+        Args:
+            src_tokens (LongTensor): tokens in the source language of shape
+                `(batch, src_len)`
+            src_lengths (LongTensor): source sentence lengths of shape `(batch)`
+            prev_output_tokens (LongTensor): previous decoder outputs of shape
+                `(batch, tgt_len)`, for teacher forcing
+
+        Returns:
+            tuple:
+                - the decoder's output of shape `(batch, tgt_len, vocab)`
+                - a dictionary with any model-specific outputs
+        """
         if self.ensemble_size is not None:
             src_tokens_dim = [1 for _ in src_tokens.shape]
             src_tokens_dim[0] = self.ensemble_size
@@ -45,7 +67,7 @@ class BEFairseqEncoderDecoderModel(FairseqEncoderDecoderModel):
                 prev_output_tokens, prev_output_tokens_dim
             )
 
-        decoder_out = super().forward(
+        decoder_out, output_dict = super().forward(
             src_tokens, src_lengths, prev_output_tokens, **kwargs
         )
 
@@ -54,7 +76,7 @@ class BEFairseqEncoderDecoderModel(FairseqEncoderDecoderModel):
                 decoder_out, decoder_out.shape[0] / self.ensemble_size
             )))
 
-        return decoder_out
+        return decoder_out, output_dict
 
 
 @register_model("be_multilingual_transformer")
