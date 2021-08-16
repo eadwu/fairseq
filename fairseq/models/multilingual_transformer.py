@@ -7,7 +7,7 @@ from collections import OrderedDict
 
 from fairseq import utils
 from fairseq.models import (
-    FairseqMultiModel,
+    FairseqMultiModel, FairseqEncoderDecoderModel,
     register_model,
     register_model_architecture,
 )
@@ -37,8 +37,10 @@ class MultilingualTransformerModel(FairseqMultiModel):
         --share-decoders: share all decoder params (incl. embeddings) across all target languages
     """
 
-    def __init__(self, encoders, decoders):
-        super().__init__(encoders, decoders)
+    def __init__(
+        self, encoders, decoders, instance=FairseqEncoderDecoderModel
+    ):
+        super().__init__(encoders, decoders, instance=instance)
 
     @staticmethod
     def add_args(parser):
