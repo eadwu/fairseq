@@ -28,10 +28,6 @@ class BatchEnsembleTransformerDecoder(TransformerDecoder):
             ]
         )
 
-    def is_train_step(self, bool):
-        for layer in self.layers:
-            layer.is_train_step(bool)
-
     def set_lang_pair_idx(self, lang_pair_idx):
         for layer in self.layers:
             layer.set_lang_pair_idx(lang_pair_idx)
@@ -63,9 +59,6 @@ class BatchEnsembleTransformerDecoderLayer(TransformerDecoderLayer):
 
         self.ensemble_size = len(self.lang_pairs)
         self.has_bias = hasattr(self.fc1, "bias")
-
-        # Model tate information
-        self.train_step = False
 
         # BatchEnsemble current language pair [index]
         self.lang_pair_idx = None
@@ -104,9 +97,6 @@ class BatchEnsembleTransformerDecoderLayer(TransformerDecoderLayer):
             self.register_parameter(
                 "context_param-ensemble_bias", self.ensemble_bias
             )
-
-    def is_train_step(self, bool):
-        self.train_step = bool
 
     def set_lang_pair_idx(self, lang_pair_idx):
         self.lang_pair_idx = lang_pair_idx
@@ -229,7 +219,7 @@ class BatchEnsembleTransformerDecoderLayer(TransformerDecoderLayer):
             ensemble_outputs = []
 
             x_components = torch.split(
-                x, x.shape[0] // self.ensemble_size
+                x, x.shape[1] // self.ensemble_size, dim=1
             )
 
             for i in range(self.ensemble_size):
@@ -248,7 +238,7 @@ class BatchEnsembleTransformerDecoderLayer(TransformerDecoderLayer):
 
                 ensemble_outputs.append(output)
 
-            x = torch.cat(ensemble_outputs, dim=0)
+            x = torch.cat(ensemble_outputs, dim=1)
         else:
             self.fc1.requires_grad_(
                 not self.lifelong_learning or

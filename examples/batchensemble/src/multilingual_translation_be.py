@@ -60,9 +60,6 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
     def _per_lang_pair_train_loss(
         self, lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
     ):
-        # Update model state machine
-        model.models[lang_pair].decoder.is_train_step(True)
-
         # Update language pair index
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
@@ -103,9 +100,6 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
         )
 
     def _per_lang_pair_valid_loss(self, lang_pair, model, criterion, sample):
-        # Update model state machine
-        model.models[lang_pair].decoder.is_train_step(False)
-
         # Update language pair index
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
@@ -122,7 +116,6 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
         # Update model state
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         for model in models:
-            model.decoder.is_train_step(False)
             model.decoder.set_lang_pair_idx(lang_pair_idx)
 
         return super().inference_step(
