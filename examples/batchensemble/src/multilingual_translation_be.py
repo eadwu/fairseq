@@ -35,6 +35,10 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
         self.n_tasks = len(self.lang_pairs)
         assert self.n_tasks > 0
 
+        self.batchensemble_vanilla = getattr(
+            args, "batchensemble_vanilla", False
+        )
+
         if training:
             self.lr_multiplier = getattr(
                 args, "batchensemble_lr_multiplier", 1.0
@@ -65,16 +69,17 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
 
         # Fixup target vector based off ensembling size
-        sample[lang_pair]["net_input"]["src_tokens"] = torch.tile(
-            sample[lang_pair]["net_input"]["src_tokens"], [self.n_tasks, 1]
-        )
-        sample[lang_pair]["net_input"]["src_lengths"] = torch.tile(
-            sample[lang_pair]["net_input"]["src_lengths"], [self.n_tasks]
-        )
-        sample[lang_pair]["target"] = torch.tile(
-            sample[lang_pair]["target"], [self.n_tasks]
-        )
-        sample[lang_pair]["ntokens"] *= self.n_tasks
+        if self.batchensemble_vanilla:
+            sample[lang_pair]["target"] = torch.tile(
+                sample[lang_pair]["target"],
+                [self.n_tasks, 1]
+            )
+            sample[lang_pair]["ntokens"] *= self.n_tasks
+
+            model.models[lang_pair].with_state(self.n_tasks, False)
+        else:
+            # Or `1, False`
+            model.models[lang_pair].with_state(None, False)
 
         return super()._per_lang_pair_train_loss(
             lang_pair, model, update_num, criterion, sample, optimizer, ignore_grad
@@ -104,6 +109,14 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         model.models[lang_pair].decoder.set_lang_pair_idx(lang_pair_idx)
 
+        # Results are averaged during validation / testing, independent errors
+        # are only needed during the optimization step (training)
+        if self.batchensemble_vanilla:
+            model.models[lang_pair].with_state(self.n_tasks, True)
+        else:
+            # Or `1, False`
+            model.models[lang_pair].with_state(None, False)
+
         return super()._per_lang_pair_valid_loss(
             lang_pair, model, criterion, sample
         )
@@ -117,6 +130,13 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
         lang_pair_idx = self._get_lang_pair_idx(lang_pair)
         for model in models:
             model.decoder.set_lang_pair_idx(lang_pair_idx)
+            # Results are averaged during validation / testing,
+            # independent errors are only needed during the optimization step
+            if self.batchensemble_vanilla:
+                model.models[lang_pair].with_state(self.n_tasks, True)
+            else:
+                # Or `1, False`
+                model.models[lang_pair].with_state(None, False)
 
         return super().inference_step(
             generator, models, sample, prefix_tokens, constraints
