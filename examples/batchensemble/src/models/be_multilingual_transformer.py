@@ -73,8 +73,8 @@ class BEFairseqEncoderDecoderModel(FairseqEncoderDecoderModel):
 
         if self.avg_ensemble:
             decoder_out = torch.mean(torch.stack(torch.split(
-                decoder_out, decoder_out.shape[0] / self.ensemble_size
-            )))
+                decoder_out, decoder_out.shape[0] // self.ensemble_size
+            )), dim=0)
 
         return decoder_out, output_dict
 
