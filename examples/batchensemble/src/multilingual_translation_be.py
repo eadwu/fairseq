@@ -26,6 +26,7 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
     def __init__(self, args, dicts, training):
         super().__init__(args, dicts, training)
 
+        self.args = args
         self.lang_pairs = args.lang_pairs
         if isinstance(self.lang_pairs, str):
             self.lang_pairs = self.lang_pairs.split(",")
@@ -92,17 +93,26 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
         if self.relative_lr:
             self.context_lr = optimizer.get_lr() * self.lr_multiplier
 
-        # Update the state dictionary of the optimizer to reflect the
-        # new learning rates for the specified parameters
-        optimizer_state = optimizer.state_dict()
-        for param_group in optimizer_state["param_groups"]:
-            if "_name" in param_group and "context_param" in param_group["_name"]:
-                param_group["lr"] = self.context_lr
-        optimizer.load_state_dict(optimizer_state)
-
-        return super().train_step(
+        agg_loss, agg_sample_size, agg_logging_output = super().train_step(
             sample, model, criterion, optimizer, update_num, ignore_grad
         )
+
+        # Fixup gradients ... this operates under a shared decoder assumption
+        assert getattr(self.args, "share_decoders", False)
+        first_lang_pair = self.lang_pairs[0]
+        # Calculation may not be equivalent depending on how gradients are
+        # accumulated
+        with torch.no_grad():
+            for name, param in model.named_parameters():
+                if first_lang_pair in name and (
+                    "context_param" in name or
+                    "alpha" in name or
+                    "gamma" in name or
+                    "ensemble_bias" in name
+                ):
+                    param.grad *= self.context_lr
+
+        return agg_loss, agg_sample_size, agg_logging_output
 
     def _per_lang_pair_valid_loss(self, lang_pair, model, criterion, sample):
         # Update language pair index
