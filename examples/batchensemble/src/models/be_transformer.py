@@ -86,6 +86,13 @@ class BatchEnsembleTransformerDecoderLayer(TransformerDecoderLayer):
         self.register_parameter("context_param-alpha", self.alpha)
         self.register_parameter("context_param-gamma", self.gamma)
 
+        if getattr(self.args, "batchensemble_normal_init", False):
+            torch.randn(self.alpha.shape, out=self.alpha)
+            torch.randn(self.gamma.shape, out=self.gamma)
+        elif getattr(self.args, "batchensemble_kaiming_init", False):
+            nn.init.kaiming_uniform_(self.alpha)
+            nn.init.kaiming_uniform_(self.gamma)
+
         if self.has_bias:
             # Stacked b_i matrix
             self.ensemble_bias = nn.Parameter(torch.zeros(

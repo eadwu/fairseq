@@ -21,6 +21,10 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
                             help='Learning rate multiplier for BatchEnsemble parameters')
         parser.add_argument('--batchensemble-lr-relative', default=False, action='store_true',
                             help='Learning rate relative to optimizer.get_lr()')
+        parser.add_argument('--batchensemble-normal-init', default=False, action='store_true',
+                            help='Initialize r_i and s_i with random normal initialization')
+        parser.add_argument('--batchensemble-kaiming-init', default=False, action='store_true',
+                            help='Initialize r_i and s_i with kaiming initialization (he_normal)')
         # fmt: on
 
     def __init__(self, args, dicts, training):
@@ -143,10 +147,10 @@ class MultilingualTranslationBatchEnsembleTask(MultilingualTranslationTask):
             # Results are averaged during validation / testing,
             # independent errors are only needed during the optimization step
             if self.batchensemble_vanilla:
-                model.models[lang_pair].with_state(self.n_tasks, True)
+                model.with_state(self.n_tasks, True)
             else:
                 # Or `1, False`
-                model.models[lang_pair].with_state(None, False)
+                model.with_state(None, False)
 
         return super().inference_step(
             generator, models, sample, prefix_tokens, constraints
