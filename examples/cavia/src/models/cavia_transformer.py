@@ -248,13 +248,11 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         r_i = getattr(self, f"context_param-r_{self.lang_pair_idx}")
         s_i = getattr(self, f"context_param-s_{self.lang_pair_idx}")
 
-        w_i = r_i @ s_i.T
-        W = getattr(self.fc1, "weight") * w_i
-        x = x @ W.T
+        x = x * r_i
+        x = self.fc1(x) * s_i
         if hasattr(self.fc1, "bias"):
             b_i = getattr(self, f"context_param-b_{self.lang_pair_idx}").squeeze(dim=1)
-            b = getattr(self.fc1, "bias") * b_i
-            x = x + b
+            x = x + b_i
 
         x = self.activation_fn(x)
         x = self.activation_dropout_module(x)
