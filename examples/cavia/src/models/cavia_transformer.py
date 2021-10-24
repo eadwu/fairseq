@@ -74,12 +74,12 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
             # should only _ever_ be indexed through their registered parameter
             # names.
             r_i = nn.Parameter(torch.ones(
-                args.decoder_ffn_embed_dim, 1,
+                self.embed_dim, 1,
                 dtype=torch.float16 if args.fp16 else torch.float32,
                 device='cuda' if torch.cuda.is_available() else 'cpu',
             ), requires_grad=True)
             s_i = nn.Parameter(torch.ones(
-                self.embed_dim, 1,
+                args.decoder_ffn_embed_dim, 1,
                 dtype=torch.float16 if args.fp16 else torch.float32,
                 device='cuda' if torch.cuda.is_available() else 'cpu',
             ), requires_grad=True)
@@ -248,8 +248,9 @@ class CAVIATransformerDecoderLayer(TransformerDecoderLayer):
         r_i = getattr(self, f"context_param-r_{self.lang_pair_idx}")
         s_i = getattr(self, f"context_param-s_{self.lang_pair_idx}")
 
-        x = x * r_i
-        x = self.fc1(x) * s_i
+        x = x * r_i.T
+        x = self.fc1(x)
+        x = x * s_i.T
         if hasattr(self.fc1, "bias"):
             b_i = getattr(self, f"context_param-b_{self.lang_pair_idx}").squeeze(dim=1)
             x = x + b_i
