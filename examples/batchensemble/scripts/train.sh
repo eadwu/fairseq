@@ -35,8 +35,8 @@ shift
 rm -rf "${CHECKPOINT}"
 mkdir -p "${CHECKPOINT}"
 
-lang_pairs="de-en,it-en,nl-en,ro-en,pt-en"
-databin_dir="$(readlink -f data-bin/iwslt17.de_it_nl_ro_pt.en.bpe16k)"
+lang_pairs="hy-en,lv-en,ne-en"
+databin_dir="$(readlink -f data-bin/data.hy_lv_ne.bpe16k)"
 
 CUDA_VISIBLE_DEVICES="${GPUS}" fairseq-train "${databin_dir}" \
   --max-epoch 50 \
@@ -45,7 +45,6 @@ CUDA_VISIBLE_DEVICES="${GPUS}" fairseq-train "${databin_dir}" \
   --optimizer adam --adam-betas '(0.9, 0.98)' \
   --lr 0.0005 --lr-scheduler inverse_sqrt \
   --warmup-updates 4000 --warmup-init-lr '1e-07' \
-  --criterion cross_entropy \
   --dropout 0.3 --weight-decay 0.0001 \
   --save-dir "${CHECKPOINT}" --tensorboard-logdir "${CHECKPOINT}" \
   --max-tokens 4000 \

@@ -6,9 +6,11 @@
 # LICENSE file in the root directory of this source tree.
 
 SRCS=(
-    "hy"
-    "lv"
-    "ne"
+    "de"
+    "it"
+    "nl"
+    "ro"
+    # "pt"
 )
 TGT=en
 
@@ -18,7 +20,9 @@ SPM_TRAIN=$SCRIPTS/spm_train.py
 SPM_ENCODE=$SCRIPTS/spm_encode.py
 
 BPESIZE=16384
-DATA=$ROOT/data.hy_lv_ne.en.bpe16k
+ORIG=$ROOT/iwslt17-trnmted
+DATA=$ROOT/iwslt17.de_it_nl_ro_pt.en.bpe16k
+mkdir -p "$ORIG" "$DATA"
 
 TRAIN_MINLEN=1  # remove sentences with <1 BPE token
 TRAIN_MAXLEN=250  # remove sentences with >250 BPE tokens
@@ -34,13 +38,13 @@ VALID_SETS=(
     "IWSLT17.TED.dev2010.it-en IWSLT17.TED.tst2010.it-en"
     "IWSLT17.TED.dev2010.nl-en IWSLT17.TED.tst2010.nl-en"
     "IWSLT17.TED.dev2010.ro-en IWSLT17.TED.tst2010.ro-en"
-    "IWSLT17.TED.dev2010.pt-en IWSLT17.TED.tst2010.pt-en"
+    # "IWSLT17.TED.dev2010.pt-en IWSLT17.TED.tst2010.pt-en"
 )
 
 echo "pre-processing train data..."
 for SRC in "${SRCS[@]}"; do
     for LANG in "${SRC}" "${TGT}"; do
-        cat "$ORIG/${SRC}-${TGT}/train.tags.${SRC}-${TGT}.${LANG}" \
+        cat "$ORIG/train.tags.${SRC}-${TGT}.${LANG}" \
             | grep -v '<url>' \
             | grep -v '<talkid>' \
             | grep -v '<keywords>' \
@@ -66,7 +70,7 @@ for ((i=0;i<${#SRCS[@]};++i)); do
     for ((j=0;j<${#VALID_SET[@]};++j)); do
         FILE=${VALID_SET[j]}
         for LANG in "$SRC" "$TGT"; do
-            grep '<seg id' "$ORIG/${SRC}-${TGT}/${FILE}.${LANG}.xml" \
+            grep '<seg id' "$ORIG/${FILE}.${LANG}.xml" \
                 | sed -e 's/<seg id="[0-9]*">\s*//g' \
                 | sed -e 's/\s*<\/seg>\s*//g' \
                 | sed -e "s/\’/\'/g" \

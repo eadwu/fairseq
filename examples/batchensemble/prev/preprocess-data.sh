@@ -86,15 +86,15 @@ fairseq-preprocess --source-lang ro --target-lang en \
     --destdir data-bin/iwslt17.de_it_nl_ro_pt.en.bpe16k/ \
     --workers "${CORES}"
 
-# Binarize the pt-en dataset
-# NOTE: it's important to reuse the en dictionary from the previous step
-fairseq-preprocess --source-lang pt --target-lang en \
-    --trainpref $TEXT/train.bpe.pt-en \
-    --validpref $TEXT/valid0.bpe.pt-en,$TEXT/valid1.bpe.pt-en \
-    --srcdict joined.vocab \
-    --tgtdict data-bin/iwslt17.de_it_nl_ro_pt.en.bpe16k/dict.en.txt \
-    --destdir data-bin/iwslt17.de_it_nl_ro_pt.en.bpe16k/ \
-    --workers "${CORES}"
+# # Binarize the pt-en dataset
+# # NOTE: it's important to reuse the en dictionary from the previous step
+# fairseq-preprocess --source-lang pt --target-lang en \
+#     --trainpref $TEXT/train.bpe.pt-en \
+#     --validpref $TEXT/valid0.bpe.pt-en,$TEXT/valid1.bpe.pt-en \
+#     --srcdict joined.vocab \
+#     --tgtdict data-bin/iwslt17.de_it_nl_ro_pt.en.bpe16k/dict.en.txt \
+#     --destdir data-bin/iwslt17.de_it_nl_ro_pt.en.bpe16k/ \
+#     --workers "${CORES}"
 
 # # Testing Set
 # # https://drive.google.com/file/d/1hIryKXS4iR9Wv_yiZv9AlgLGnOnKx2_Z/view
