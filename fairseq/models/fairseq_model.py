@@ -366,7 +366,9 @@ class FairseqModel(FairseqEncoderDecoderModel):
 class FairseqMultiModel(BaseFairseqModel):
     """Base class for combining multiple encoder-decoder models."""
 
-    def __init__(self, encoders, decoders):
+    def __init__(
+        self, encoders, decoders, instance=FairseqEncoderDecoderModel
+    ):
         super().__init__()
         assert encoders.keys() == decoders.keys()
         self.keys = list(encoders.keys())
@@ -376,7 +378,7 @@ class FairseqMultiModel(BaseFairseqModel):
 
         self.models = nn.ModuleDict(
             {
-                key: FairseqEncoderDecoderModel(encoders[key], decoders[key])
+                key: instance(encoders[key], decoders[key])
                 for key in self.keys
             }
         )

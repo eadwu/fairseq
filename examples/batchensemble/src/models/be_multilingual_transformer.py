@@ -1,71 +1,98 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
-#
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-
 from collections import OrderedDict
+
+import torch
 
 from fairseq import utils
 from fairseq.models import (
+    register_model, register_model_architecture,
     FairseqMultiModel, FairseqEncoderDecoderModel,
-    register_model,
-    register_model_architecture,
+)
+from fairseq.models.multilingual_transformer import (
+    MultilingualTransformerModel, multilingual_transformer_iwslt_de_en
 )
 from fairseq.models.transformer import (
     Embedding,
-    TransformerDecoder,
     TransformerEncoder,
-    TransformerModel,
-    base_architecture,
 )
 
+from .be_transformer import BatchEnsembleTransformerDecoder
 
-@register_model("multilingual_transformer")
-class MultilingualTransformerModel(FairseqMultiModel):
-    """Train Transformer models for multiple language pairs simultaneously.
 
-    Requires `--task multilingual_translation`.
+class BEFairseqEncoderDecoderModel(FairseqEncoderDecoderModel):
+    def __init__(self, encoder, decoder):
+        super().__init__(encoder, decoder)
 
-    We inherit all arguments from TransformerModel and assume that all language
-    pairs use a single Transformer architecture. In addition, we provide several
-    options that are specific to the multilingual setting.
+        self.ensemble_size = None
+        self.avg_ensemble = False
 
-    Args:
-        --share-encoder-embeddings: share encoder embeddings across all source languages
-        --share-decoder-embeddings: share decoder embeddings across all target languages
-        --share-encoders: share all encoder params (incl. embeddings) across all source languages
-        --share-decoders: share all decoder params (incl. embeddings) across all target languages
+    def with_state(self, ensemble_size, avg_ensemble):
+        self.ensemble_size = ensemble_size
+        self.avg_ensemble = avg_ensemble
+
+    def forward(self, src_tokens, src_lengths, prev_output_tokens, **kwargs):
+        """
+        Run the forward pass for an encoder-decoder model.
+
+        First feed a batch of source tokens through the encoder. Then, feed the
+        encoder output and previous decoder outputs (i.e., teacher forcing) to
+        the decoder to produce the next outputs::
+
+            encoder_out = self.encoder(src_tokens, src_lengths)
+            return self.decoder(prev_output_tokens, encoder_out)
+
+        Args:
+            src_tokens (LongTensor): tokens in the source language of shape
+                `(batch, src_len)`
+            src_lengths (LongTensor): source sentence lengths of shape `(batch)`
+            prev_output_tokens (LongTensor): previous decoder outputs of shape
+                `(batch, tgt_len)`, for teacher forcing
+
+        Returns:
+            tuple:
+                - the decoder's output of shape `(batch, tgt_len, vocab)`
+                - a dictionary with any model-specific outputs
+        """
+        if self.ensemble_size is not None:
+            src_tokens_dim = [1 for _ in src_tokens.shape]
+            src_tokens_dim[0] = self.ensemble_size
+            src_tokens = torch.tile(src_tokens, src_tokens_dim)
+
+            src_lengths_dim = [1 for _ in src_lengths.shape]
+            src_lengths_dim[0] = self.ensemble_size
+            src_lengths = torch.tile(src_lengths, src_lengths_dim)
+
+            prev_output_tokens_dim = [1 for _ in prev_output_tokens.shape]
+            prev_output_tokens_dim[0] = self.ensemble_size
+            prev_output_tokens = torch.tile(
+                prev_output_tokens, prev_output_tokens_dim
+            )
+
+        decoder_out, output_dict = super().forward(
+            src_tokens, src_lengths, prev_output_tokens, **kwargs
+        )
+
+        if self.avg_ensemble:
+            decoder_out = torch.mean(torch.stack(torch.split(
+                decoder_out, decoder_out.shape[0] // self.ensemble_size
+            )), dim=0)
+
+        return decoder_out, output_dict
+
+
+@register_model("be_multilingual_transformer")
+class BatchEnsembleMultilingualTransformer(MultilingualTransformerModel):
+    """A variant of standard multilingual Transformer models whose decoder
+    supports uses BatchEnsemble.
     """
-
     def __init__(
-        self, encoders, decoders, instance=FairseqEncoderDecoderModel
+        self, encoders, decoders, instance=BEFairseqEncoderDecoderModel
     ):
         super().__init__(encoders, decoders, instance=instance)
 
     @staticmethod
     def add_args(parser):
         """Add model-specific arguments to the parser."""
-        TransformerModel.add_args(parser)
-        parser.add_argument(
-            "--share-encoder-embeddings",
-            action="store_true",
-            help="share encoder embeddings across languages",
-        )
-        parser.add_argument(
-            "--share-decoder-embeddings",
-            action="store_true",
-            help="share decoder embeddings across languages",
-        )
-        parser.add_argument(
-            "--share-encoders",
-            action="store_true",
-            help="share encoders across languages",
-        )
-        parser.add_argument(
-            "--share-decoders",
-            action="store_true",
-            help="share decoders across languages",
-        )
+        MultilingualTransformerModel.add_args(parser)
 
     @classmethod
     def build_model(cls, args, task):
@@ -75,7 +102,7 @@ class MultilingualTransformerModel(FairseqMultiModel):
         assert isinstance(task, MultilingualTranslationTask)
 
         # make sure all arguments are present in older models
-        base_multilingual_architecture(args)
+        batch_ensemble_multilingual_architecture(args)
 
         if not hasattr(args, "max_source_positions"):
             args.max_source_positions = 1024
@@ -189,42 +216,36 @@ class MultilingualTransformerModel(FairseqMultiModel):
                 shared_decoder if shared_decoder is not None else get_decoder(tgt)
             )
 
-        return MultilingualTransformerModel(encoders, decoders)
+        return BatchEnsembleMultilingualTransformer(encoders, decoders)
 
     @classmethod
-    def _get_module_class(cls, is_encoder, args, lang_dict, embed_tokens, langs):
-        module_class = TransformerEncoder if is_encoder else TransformerDecoder
+    def _get_module_class(
+        cls, is_encoder, args, lang_dict, embed_tokens, langs
+    ):
+        module_class = (
+            TransformerEncoder
+            if is_encoder
+            else BatchEnsembleTransformerDecoder
+        )
+
         return module_class(args, lang_dict, embed_tokens)
-
-    def load_state_dict(self, state_dict, strict=True, model_cfg=None):
-        state_dict_subset = state_dict.copy()
-        for k, _ in state_dict.items():
-            assert k.startswith("models.")
-            lang_pair = k.split(".")[1]
-            if lang_pair not in self.models:
-                del state_dict_subset[k]
-        super().load_state_dict(state_dict_subset, strict=strict, model_cfg=model_cfg)
-
-
-@register_model_architecture("multilingual_transformer", "multilingual_transformer")
-def base_multilingual_architecture(args):
-    base_architecture(args)
-    args.share_encoder_embeddings = getattr(args, "share_encoder_embeddings", False)
-    args.share_decoder_embeddings = getattr(args, "share_decoder_embeddings", False)
-    args.share_encoders = getattr(args, "share_encoders", False)
-    args.share_decoders = getattr(args, "share_decoders", False)
 
 
 @register_model_architecture(
-    "multilingual_transformer", "multilingual_transformer_iwslt_de_en"
+    "be_multilingual_transformer",
+    "batch_ensemble_multilingual_transformer"
 )
-def multilingual_transformer_iwslt_de_en(args):
-    args.encoder_embed_dim = getattr(args, "encoder_embed_dim", 512)
-    args.encoder_ffn_embed_dim = getattr(args, "encoder_ffn_embed_dim", 1024)
-    args.encoder_attention_heads = getattr(args, "encoder_attention_heads", 4)
-    args.encoder_layers = getattr(args, "encoder_layers", 6)
-    args.decoder_embed_dim = getattr(args, "decoder_embed_dim", 512)
-    args.decoder_ffn_embed_dim = getattr(args, "decoder_ffn_embed_dim", 1024)
-    args.decoder_attention_heads = getattr(args, "decoder_attention_heads", 4)
-    args.decoder_layers = getattr(args, "decoder_layers", 6)
-    base_multilingual_architecture(args)
+def batch_ensemble_multilingual_architecture(args):
+    multilingual_transformer_iwslt_de_en(args)
+
+
+@register_model_architecture(
+    "be_multilingual_transformer",
+    "batch_ensemble_phat_multilingual_transformer"
+)
+def batch_ensemble_phat_multilingual_architecture(args):
+    # Latent Depth number of layers
+    args.encoder_layers = getattr(args, "encoder_layers", 12)
+    args.decoder_layers = getattr(args, "decoder_layers", 24)
+
+    batch_ensemble_multilingual_architecture(args)
